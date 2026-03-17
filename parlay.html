@@ -31,7 +31,14 @@
   <div class="page-hdr">
     <div class="page-hdr-brand"><div><div class="page-hdr-title">PARLAY BUILDER</div><div class="page-hdr-sub">AI finds best 2 &amp; 3-leg parlays · today's games only · EV + correlation</div></div></div>
     <div class="page-hdr-actions">
-      <select class="t-select" id="sport-sel" style="font-size:10px;"><option value="all">All Sports</option><option value="nba">NBA</option><option value="nfl">NFL</option><option value="mlb">MLB</option><option value="nhl">NHL</option></select>
+      <select class="t-select" id="sport-sel" style="font-size:10px;">
+  <option value="all">All Sports</option>
+  <option value="nba">NBA</option><option value="nfl">NFL</option>
+  <option value="mlb">MLB</option><option value="nhl">NHL</option>
+  <option value="ncaab">NCAAB Basketball</option>
+  <option value="ncaab2">College Baseball</option>
+  <option value="tennis">Tennis (ATP+WTA)</option>
+</select>
       <select class="t-select" id="legs-sel" style="font-size:10px;"><option value="both">2 &amp; 3 Legs</option><option value="2">2-Leg Only</option><option value="3">3-Leg Only</option></select>
       <button class="t-btn-ghost" onclick="clearBuilder()">CLEAR</button>
       <button class="t-btn" id="find-btn" onclick="findParlays()">⚡ FIND BEST PARLAYS</button>
@@ -117,11 +124,16 @@ document.getElementById('nav-container').innerHTML = navHTML('parlay');
 checkServerStatus();
 
 const SPORT_KEYS = {
-  all: ['basketball_nba','americanfootball_nfl','baseball_mlb','icehockey_nhl'],  // Odds API uses full keys
-  nba: ['basketball_nba'],
-  nfl: ['americanfootball_nfl'],
-  mlb: ['baseball_mlb'],
-  nhl: ['icehockey_nhl']
+  all:    ['basketball_nba','americanfootball_nfl','baseball_mlb','icehockey_nhl','basketball_ncaab','baseball_college_baseball','tennis_atp','tennis_wta'],
+  nba:    ['basketball_nba'],
+  nfl:    ['americanfootball_nfl'],
+  mlb:    ['baseball_mlb'],
+  nhl:    ['icehockey_nhl'],
+  ncaab:  ['basketball_ncaab'],
+  ncaab2: ['baseball_college_baseball'],
+  tennis: ['tennis_atp','tennis_wta'],
+  atp:    ['tennis_atp'],
+  wta:    ['tennis_wta'],
 };
 
 let foundParlays  = [];

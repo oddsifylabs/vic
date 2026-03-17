@@ -243,8 +243,9 @@ app.post('/api/bets', async (req, res) => {
   // Auto-snapshot current odds for CLV tracking (async, don't block response)
   if (bet.odds && bet.sport) {
     const SPORT_KEYS = {
-      NBA:'basketball_nba', NFL:'americanfootball_nfl', MLB:'baseball_mlb',
-      NHL:'icehockey_nhl', NCAAB:'basketball_ncaab', EPL:'soccer_epl'
+      NBA:'basketball_nba',   NFL:'americanfootball_nfl', MLB:'baseball_mlb',
+      NHL:'icehockey_nhl',    NCAAB:'basketball_ncaab',  EPL:'soccer_epl',
+      NCAAB2:'baseball_college_baseball', TENNIS:'tennis_atp',
     };
     const sportKey  = SPORT_KEYS[bet.sport] || 'basketball_nba';
     const teamGuess = (bet.bet || '').replace(/^(over|under)\s+[\d.]+\s*/i,'')
@@ -309,7 +310,7 @@ app.get('/api/clv/closing/:sport/:team', async (req, res) => {
   const team = decodeURIComponent(req.params.team).toLowerCase().trim();
   if (!team || team.length < 2) return res.json({ ok: false, error: 'Team name too short' });
 
-  const ALL_SPORTS = ['basketball_nba','americanfootball_nfl','baseball_mlb','icehockey_nhl','basketball_ncaab'];
+  const ALL_SPORTS = ['basketball_nba','americanfootball_nfl','baseball_mlb','icehockey_nhl','basketball_ncaab','baseball_college_baseball','tennis_atp'];
   const SPORT_FALLBACKS = {
     'basketball_nba':       ['basketball_nba'],
     'americanfootball_nfl': ['americanfootball_nfl'],
@@ -1363,14 +1364,16 @@ app.get('/api/full-context/:sport', async (req, res) => {
 
 // ESPN API sport+league mapping
 const ESPN_API_MAP = {
-  nba:   { sport:'basketball',    league:'nba',             short:'NBA'   },
-  nfl:   { sport:'football',      league:'nfl',             short:'NFL'   },
-  mlb:   { sport:'baseball',      league:'mlb',             short:'MLB'   },
-  nhl:   { sport:'hockey',        league:'nhl',             short:'NHL'   },
-  ncaab: { sport:'basketball',    league:'mens-college-basketball', short:'NCAAB' },
-  ncaaf: { sport:'football',      league:'college-football', short:'NCAAF' },
-  epl:   { sport:'soccer',        league:'eng.1',           short:'EPL'   },
-  mls:   { sport:'soccer',        league:'usa.1',           short:'MLS'   },
+  nba:    { sport:'basketball',    league:'nba',                     short:'NBA'   },
+  nfl:    { sport:'football',      league:'nfl',                     short:'NFL'   },
+  mlb:    { sport:'baseball',      league:'mlb',                     short:'MLB'   },
+  nhl:    { sport:'hockey',        league:'nhl',                     short:'NHL'   },
+  ncaab:  { sport:'basketball',    league:'mens-college-basketball',  short:'NCAAB' },
+  ncaaf:  { sport:'football',      league:'college-football',         short:'NCAAF' },
+  ncaab2: { sport:'baseball',      league:'college-baseball',         short:'NCAAB2'},
+  epl:    { sport:'soccer',        league:'eng.1',                   short:'EPL'   },
+  mls:    { sport:'soccer',        league:'usa.1',                   short:'MLS'   },
+  tennis: { sport:'tennis',        league:'atp',                     short:'ATP'   },
 };
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
@@ -1425,7 +1428,7 @@ app.get('/api/news/:sport', async (req, res) => {
 
   // SAO news section — ActionNetwork articles linked from SAO pages
   try {
-    const saoSport = { nba:'nba', nfl:'nfl', mlb:'mlb', nhl:'nhl', ncaab:'ncaab', ncaaf:'ncaaf' }[sport];
+    const saoSport = { nba:'nba', nfl:'nfl', mlb:'mlb', nhl:'nhl', ncaab:'ncaab', ncaaf:'ncaaf', ncaab2:'ncaab', tennis:'tennis' }[sport];
     if (saoSport) {
       const saoUrl = `https://www.scoresandodds.com/${saoSport}`;
       const r = await fetch(saoUrl, { headers: SCRAPE_HEADERS });
@@ -1658,7 +1661,7 @@ app.get('/api/espn/leaders/:sport', async (req, res) => {
 // ── ALL-SPORTS NEWS COMBINED ───────────────────────────
 // GET /api/news-all
 app.get('/api/news-all', async (req, res) => {
-  const sports = ['nba','nfl','mlb','nhl','ncaab'];
+  const sports = ['nba','nfl','mlb','nhl','ncaab','ncaab2','tennis'];
   const all    = [];
   await Promise.allSettled(sports.map(async sport => {
     try {

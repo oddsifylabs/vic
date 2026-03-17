@@ -72,7 +72,18 @@
       <button class="page-tab" onclick="switchPageTab('settings',this)">MODEL SETTINGS</button>
     </div>
     <div style="display:flex;gap:8px;padding:7px 16px;border-bottom:1px solid #0f2010;flex-shrink:0;flex-wrap:wrap;background:#050b05;">
-      <select class="t-select" id="sports-select" style="font-size:10px;"><option value="all">ALL SPORTS</option><option value="nba">NBA</option><option value="nfl">NFL</option><option value="mlb">MLB</option><option value="nhl">NHL</option><option value="ncaab">NCAAB</option></select>
+      <select class="t-select" id="sports-select" style="font-size:10px;">
+  <option value="all">ALL SPORTS</option>
+  <option value="nba">NBA</option>
+  <option value="nfl">NFL</option>
+  <option value="mlb">MLB</option>
+  <option value="nhl">NHL</option>
+  <option value="ncaab">NCAAB (Basketball)</option>
+  <option value="ncaab2">NCAAB2 (Baseball)</option>
+  <option value="tennis">Tennis (ATP + WTA)</option>
+  <option value="atp">ATP only</option>
+  <option value="wta">WTA only</option>
+</select>
       <select class="t-select" id="types-select" style="font-size:10px;"><option value="all">ALL TYPES</option><option value="props">PROPS ONLY</option><option value="games">GAME BETS</option></select>
       <select class="t-select" id="min-score" style="font-size:10px;"><option value="7">7+/12 STANDARD</option><option value="9">9+/12 SHARP</option><option value="10">10+/12 ELITE</option></select>
       <input type="number" class="t-input" id="max-units" value="5" min="1" max="20" style="width:55px;" title="Max units">
@@ -100,7 +111,13 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:560px;margin-top:8px;">
       <div><div class="t-label">Sport</div>
         <select class="t-select" id="ss-sport" style="width:100%;" onchange="document.getElementById('sports-select').value=this.value">
-          <option value="all">ALL SPORTS</option><option value="nba">NBA</option><option value="nfl">NFL</option><option value="mlb">MLB</option><option value="nhl">NHL</option><option value="ncaab">NCAAB</option>
+          <option value="all">ALL SPORTS</option>
+          <option value="nba">NBA</option><option value="nfl">NFL</option>
+          <option value="mlb">MLB</option><option value="nhl">NHL</option>
+          <option value="ncaab">NCAAB Basketball</option>
+          <option value="ncaab2">College Baseball</option>
+          <option value="tennis">Tennis (ATP+WTA)</option>
+          <option value="atp">ATP</option><option value="wta">WTA</option>
         </select></div>
       <div><div class="t-label">Bet Type</div>
         <select class="t-select" id="ss-type" style="width:100%;" onchange="document.getElementById('types-select').value=this.value">
@@ -174,7 +191,18 @@ function switchPageTab(name, el) {
   if (legsLayout)   legsLayout.style.display   = name === 'model'    ? 'grid' : 'none';
   if (settingsPanel) settingsPanel.style.display = name === 'settings' ? 'block' : 'none';
 }
-const sportMap={all:[['basketball_nba','NBA'],['americanfootball_nfl','NFL'],['baseball_mlb','MLB'],['icehockey_nhl','NHL'],['soccer_epl','EPL'],['basketball_ncaab','NCAAB']],nba:[['basketball_nba','NBA']],nfl:[['americanfootball_nfl','NFL']],mlb:[['baseball_mlb','MLB']],nhl:[['icehockey_nhl','NHL']],ncaab:[['basketball_ncaab','NCAAB']]};
+const sportMap={
+  all:    [['basketball_nba','NBA'],['americanfootball_nfl','NFL'],['baseball_mlb','MLB'],['icehockey_nhl','NHL'],['basketball_ncaab','NCAAB'],['baseball_college_baseball','NCAAB2'],['tennis_atp','ATP'],['tennis_wta','WTA']],
+  nba:    [['basketball_nba','NBA']],
+  nfl:    [['americanfootball_nfl','NFL']],
+  mlb:    [['baseball_mlb','MLB']],
+  nhl:    [['icehockey_nhl','NHL']],
+  ncaab:  [['basketball_ncaab','NCAAB']],
+  ncaab2: [['baseball_college_baseball','NCAAB2']],
+  tennis: [['tennis_atp','ATP'],['tennis_wta','WTA']],
+  atp:    [['tennis_atp','ATP']],
+  wta:    [['tennis_wta','WTA']],
+};
 let currentLegs=[],scanHistory=JSON.parse(localStorage.getItem('vic_scans')||'[]');
 renderScanHistory();
 

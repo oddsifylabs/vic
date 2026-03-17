@@ -41,7 +41,7 @@
         <div><div class="t-label">Bet Description</div><input type="text" class="t-input" id="tr-bet" placeholder="e.g. Lakers ML +120"></div>
         <div><div class="t-label">Odds</div><input type="number" class="t-input" id="tr-odds" placeholder="-110"></div>
         <div><div class="t-label">Units</div><input type="number" class="t-input" id="tr-units" value="1" step="0.5" min="0.5"></div>
-        <div><div class="t-label">Sport</div><select class="t-select" id="tr-sport" style="width:100%;"><option>NBA</option><option>NFL</option><option>MLB</option><option>NHL</option><option>EPL</option><option>MLS</option></select></div>
+        <div><div class="t-label">Sport</div><select class="t-select" id="tr-sport" style="width:100%;"><option>NBA</option><option>NFL</option><option>MLB</option><option>NHL</option><option>NCAAB</option><option>College Baseball</option><option>ATP</option><option>WTA</option><option>EPL</option><option>MLS</option></select></div>
         <div><div class="t-label">Book</div><select class="t-select" id="tr-book" style="width:100%;"><option>Hard Rock Bet</option><option>FanDuel</option><option>DraftKings</option><option>BetMGM</option></select></div>
         <div><div class="t-label">Result</div><select class="t-select" id="tr-result" style="width:100%;"><option value="pending">PENDING</option><option value="win">WIN</option><option value="loss">LOSS</option><option value="push">PUSH</option></select></div>
       </div>
@@ -49,7 +49,7 @@
     </div>
     <!-- Filters -->
     <div style="display:flex;gap:6px;padding:7px 16px;border-bottom:1px solid #0f2010;flex-shrink:0;flex-wrap:wrap;background:#050b05;">
-      <select class="t-select" id="f-sport" onchange="renderBets()" style="font-size:10px;"><option value="all">ALL SPORTS</option><option>NBA</option><option>NFL</option><option>MLB</option><option>NHL</option></select>
+      <select class="t-select" id="f-sport" onchange="renderBets()" style="font-size:10px;"><option value="all">ALL SPORTS</option><option>NBA</option><option>NFL</option><option>MLB</option><option>NHL</option><option>NCAAB</option><option>College Baseball</option><option>ATP</option><option>WTA</option></select>
       <select class="t-select" id="f-result" onchange="renderBets()" style="font-size:10px;"><option value="all">ALL RESULTS</option><option value="win">WIN</option><option value="loss">LOSS</option><option value="pending">PENDING</option></select>
       <select class="t-select" id="f-book" onchange="renderBets()" style="font-size:10px;"><option value="all">ALL BOOKS</option><option>Hard Rock Bet</option><option>FanDuel</option><option>DraftKings</option><option>BetMGM</option></select>
       <span id="f-count" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;align-self:center;margin-left:auto;"></span>
@@ -200,7 +200,7 @@ function editBet(id){
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
         <div><div class="t-label">Odds</div><input type="number" class="t-input" id="eb-odds" value="${b.odds||''}"></div>
         <div><div class="t-label">Units</div><input type="number" class="t-input" id="eb-units" value="${b.units||1}" step="0.5"></div>
-        <div><div class="t-label">Sport</div><select class="t-select" id="eb-sport" style="width:100%;">${['NBA','NFL','MLB','NHL','EPL','MLS'].map(s=>`<option ${s===b.sport?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div><div class="t-label">Sport</div><select class="t-select" id="eb-sport" style="width:100%;">${['NBA','NFL','MLB','NHL','NCAAB','College Baseball','ATP','WTA','EPL','MLS'].map(s=>`<option ${s===b.sport?'selected':''}>${s}</option>`).join('')}</select></div>
         <div><div class="t-label">Result</div><select class="t-select" id="eb-result" style="width:100%;">${[['pending','PENDING'],['win','WIN'],['loss','LOSS'],['push','PUSH']].map(([v,l])=>`<option value="${v}" ${v===b.result?'selected':''}>${l}</option>`).join('')}</select></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:4px;">

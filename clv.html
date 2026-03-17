@@ -151,7 +151,12 @@
         <div><div class="t-label">Sport</div>
           <select class="t-select" id="m-sport" style="width:100%;" onchange="updateSportKey()">
             <option value="NBA">NBA</option><option value="NFL">NFL</option>
-            <option value="MLB">MLB</option><option value="NHL">NHL</option><option value="EPL">EPL</option>
+            <option value="MLB">MLB</option><option value="NHL">NHL</option>
+            <option value="NCAAB">NCAAB Basketball</option>
+            <option value="NCAAB2">College Baseball</option>
+            <option value="ATP">Tennis ATP</option>
+            <option value="WTA">Tennis WTA</option>
+            <option value="EPL">EPL</option>
           </select>
         </div>
         <div><div class="t-label">Result</div>
@@ -176,11 +181,13 @@ document.getElementById('nav-container').innerHTML = navHTML('clv');
 checkServerStatus();
 
 const SPORT_KEY_MAP = {
-  NBA:'basketball_nba',   NFL:'americanfootball_nfl',
-  MLB:'baseball_mlb',     NHL:'icehockey_nhl',
-  EPL:'soccer_epl',       MLS:'soccer_usa_mls',
+  NBA:'basketball_nba',     NFL:'americanfootball_nfl',
+  MLB:'baseball_mlb',       NHL:'icehockey_nhl',
+  EPL:'soccer_epl',         MLS:'soccer_usa_mls',
   NCAAB:'basketball_ncaab', NCAAF:'americanfootball_ncaaf',
-  // For parlays/sharp signals try all sports
+  NCAAB2:'baseball_college_baseball',
+  ATP:'tennis_atp',         WTA:'tennis_wta',
+  TENNIS:'tennis_atp',
   PARLAY:'all',  SHARP:'all',  PROP:'all',
 };
 
