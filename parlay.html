@@ -131,11 +131,17 @@ let activeTab     = 'finder';
 
 // ── Tab switching ─────────────────────────────────────
 function switchTab(name, el) {
-  document.querySelectorAll('.t-tab').forEach(t => t.classList.remove('active'));
+  // Remove active from all tabs
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   activeTab = name;
-  document.querySelectorAll('.t-panel').forEach(p => { p.style.display = 'none'; });
-  const panel = document.getElementById(`panel-${name}`);
+  // Hide all panels
+  ['panel-finder','panel-builder','panel-saved'].forEach(id => {
+    const p = document.getElementById(id);
+    if (p) p.style.display = 'none';
+  });
+  // Show target panel
+  const panel = document.getElementById('panel-' + name);
   if (panel) panel.style.display = (name === 'builder') ? 'flex' : 'block';
   if (name === 'saved') renderSaved();
 }
@@ -148,7 +154,7 @@ if (queue.length) {
     if (item.bet && item.odds) builderLegs.push({ id: Date.now() + Math.random(), bet: item.bet, odds: item.odds, sport: item.sport || '' });
   });
   if (builderLegs.length) {
-    switchTab('builder', document.querySelectorAll('.t-tab')[1]);
+    switchTab('builder', document.querySelector('.page-tab:nth-child(2)') || document.querySelectorAll('.page-tab')[1]);
     renderBuilder(); calcEV();
     showToast(`${builderLegs.length} leg${builderLegs.length !== 1 ? 's' : ''} loaded from Legs page`);
   }
@@ -407,7 +413,7 @@ function loadToBuilder(idx) {
   const p = foundParlays[idx];
   if (!p) return;
   builderLegs = p.legs.map(l => ({ id: Date.now() + Math.random(), bet: l.label, odds: l.odds }));
-  switchTab('builder', document.querySelectorAll('.t-tab')[1]);
+  switchTab('builder', document.querySelector('.page-tab:nth-child(2)') || document.querySelectorAll('.page-tab')[1]);
   renderBuilder(); calcEV();
   // Highlight the selected card
   document.querySelectorAll('.parlay-found').forEach((el, i) => {
@@ -544,7 +550,7 @@ function renderSaved() {
 
 function loadSaved(i) {
   builderLegs = savedParlays[i].legs.map(l => ({ ...l, id: Date.now() + Math.random() }));
-  switchTab('builder', document.querySelectorAll('.t-tab')[1]);
+  switchTab('builder', document.querySelector('.page-tab:nth-child(2)') || document.querySelectorAll('.page-tab')[1]);
   renderBuilder(); calcEV();
   analyzeCurrentBuilder();
 }
@@ -573,10 +579,10 @@ function showToast(msg, href, linkLabel) {
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
 }
-</script>
-// Sidebar status
+
 function sbLog(msg,cls=''){const el=document.getElementById('sb-log');if(!el)return;const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
 async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){const cfg=await r.json();document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';document.getElementById('sb-odds').className=cfg.oddsKey?'psb-ok':'psb-err';document.getElementById('sb-odds').textContent=cfg.oddsKey?'KEY SET':'NO KEY';document.getElementById('sb-claude').className=cfg.claudeKey?'psb-ok':'psb-err';document.getElementById('sb-claude').textContent=cfg.claudeKey?'KEY SET':'NO KEY';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
 sbStatus();
+</script>
 </body>
 </html>

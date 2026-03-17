@@ -207,6 +207,61 @@ app.post('/api/clv', (req, res) => {
   const entry = { ...req.body, id: Date.now(), date: new Date().toLocaleDateString() };
   clv.push(entry); saveClv(clv); res.json(entry);
 });
+// GET /api/clv/closing/:sportKey/:team — fetch current closing odds for a team
+// Used by CLV page to auto-fill closing line
+app.get('/api/clv/closing/:sport/:team', async (req, res) => {
+  const cfg = loadConfig();
+  if (!cfg.oddsKey) return res.json({ error: 'No odds API key', odds: null });
+
+  const sport = req.params.sport;
+  const team  = decodeURIComponent(req.params.team).toLowerCase();
+
+  try {
+    const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${cfg.oddsKey}&regions=us,us2&markets=h2h,spreads&oddsFormat=american&bookmakers=hardrockbet,fanduel,draftkings,betmgm`;
+    const r   = await fetch(url);
+    const games = await r.json();
+
+    let foundGame = null, foundOdds = null;
+
+    for (const game of (Array.isArray(games) ? games : [])) {
+      const awayMatch = game.away_team?.toLowerCase().includes(team) || team.includes(game.away_team?.toLowerCase().split(' ').pop() || '');
+      const homeMatch = game.home_team?.toLowerCase().includes(team) || team.includes(game.home_team?.toLowerCase().split(' ').pop() || '');
+      if (!awayMatch && !homeMatch) continue;
+
+      foundGame = game;
+      const side = awayMatch ? game.away_team : game.home_team;
+
+      // Find best odds across books
+      let bestOdds = null, bestBook = null;
+      for (const book of (game.bookmakers || [])) {
+        for (const market of (book.markets || [])) {
+          const outcome = market.outcomes?.find(o => o.name === side);
+          if (!outcome) continue;
+          if (bestOdds === null || Math.abs(outcome.price) < Math.abs(bestOdds)) {
+            bestOdds = outcome.price;
+            bestBook = book.key;
+          }
+        }
+      }
+
+      if (bestOdds !== null) {
+        foundOdds = { team: side, odds: bestOdds, book: bestBook, game: `${game.away_team} @ ${game.home_team}` };
+        break;
+      }
+    }
+
+    if (foundOdds) {
+      addLog('info', 'CLV', `Closing odds found for ${team}`, `${foundOdds.odds} @ ${foundOdds.book}`);
+      return res.json({ ok: true, ...foundOdds });
+    }
+    return res.json({ ok: false, error: 'Team not found in current odds', odds: null });
+
+  } catch(e) {
+    addLog('error', 'CLV', `Closing odds fetch failed`, e.message);
+    res.json({ error: e.message, odds: null });
+  }
+});
+
 app.put('/api/clv/:id', (req, res) => {
   let clv = loadClv();
   const idx = clv.findIndex(e => e.id == req.params.id);
