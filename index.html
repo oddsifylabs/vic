@@ -480,7 +480,7 @@
               <button class="t-sp-btn" onclick="filterBetGames('nhl',this)">NHL</button>
             </div>
             <div id="games-out" style="overflow-y:auto;flex:1;">
-              <div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading...</span></div>
+              <div class="tl"><span class="td">SYS&gt;</span><span class="ta" id="games-status">connecting to VIC...</span></div>
             </div>
           </div>
 
@@ -864,6 +864,8 @@ async function loadGames() {
       } catch(e) {}
     }
     allGames = games;
+    // If no games found via proxy, try ESPN directly as fallback
+    if (!games.length) throw new Error('no games from proxy — try ESPN direct');
     const ct = games.length;
     const sports = [...new Set(games.map(g => g._sh))];
     document.getElementById('k-games').textContent = ct || '—';
@@ -871,7 +873,7 @@ async function loadGames() {
     addLog('ok', `${ct} games loaded across ${sports.length} sports`);
     renderBetGames();
   } catch(e) {
-    addLog('warn', `proxy offline — trying ESPN directly`);
+    addLog('warn', `proxy offline or no games — trying ESPN directly`);
     // Fallback: hit ESPN scoreboard directly
     try {
       const sports = [['nba','basketball','nba'],['nfl','americanfootball','nfl'],['mlb','baseball','mlb'],['nhl','icehockey','nhl']];
@@ -941,7 +943,13 @@ function gameLines(games, limit) {
   });
 
   const filtered = pending.slice(0, limit || 999);
-  if (!filtered.length) return `<div class="tl"><span class="tm">no upcoming games today</span></div>`;
+  if (!filtered.length) {
+    const offlineMsg = allGames.length === 0
+      ? `<div class="tl"><span class="tr">[!]</span><span style="color:#cc3333;font-family:'JetBrains Mono',monospace;font-size:11px;">VIC offline — run start.ps1 to load games</span></div>`
+      : `<div class="tl"><span class="tm">no upcoming games found today</span></div>`;
+    document.getElementById('games-out').innerHTML = offlineMsg;
+    return;
+  }
 
   return filtered.map(g => {
     const start  = new Date(g.commence_time || g.date);
@@ -1082,6 +1090,7 @@ async function loadNews() {
     const r    = await fetch(`${API}/api/news-all`);
     const data = await r.json();
     newsItems  = (data.items || []);
+    if (!newsItems.length) throw new Error('no news from proxy — try ESPN direct');
     addLog('ok', `${newsItems.length} news items loaded`);
     renderNewsOverview();
   } catch(e) {
