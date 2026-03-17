@@ -602,8 +602,14 @@ app.get('/proxy/odds/*', async (req, res) => {
     const r = await fetch(url);
     const data = await r.json();
     const remaining = r.headers.get('x-requests-remaining') || '?';
-    const used = r.headers.get('x-requests-used') || '?';
+    const used      = r.headers.get('x-requests-used') || '?';
     addLog('info', 'OddsAPI', `GET ${apiPath}`, `Status:${r.status} Remaining:${remaining} Used:${used}`);
+    // Pass through non-200 with the actual Odds API error message
+    if (!r.ok) {
+      const errMsg = data?.message || data?.error || `HTTP ${r.status}`;
+      addLog('error', 'OddsAPI', `${apiPath} returned ${r.status}`, errMsg);
+      return res.status(r.status).json({ error: errMsg, status: r.status, detail: data });
+    }
     res.json(data);
   } catch(e) {
     addLog('error', 'OddsAPI', `GET ${apiPath} FAILED`, e.message);

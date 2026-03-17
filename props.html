@@ -21,7 +21,7 @@
 <div class="main" style="padding:10px 14px;">
 <div class="page-shell">
   <div class="page-hdr">
-    <div class="page-hdr-brand"><div><div class="page-hdr-title">PROPS FEED</div><div class="page-hdr-sub">Player props · multi-book · Hard Rock Bet · EV filter</div></div></div>
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">PROPS FEED</div><div class="page-hdr-sub">Player props · multi-book · Hard Rock Bet · EV filter · requires player-props plan</div></div></div>
     <div class="page-hdr-actions">
       <button class="t-btn" onclick="loadProps()">↺ REFRESH</button>
     </div>
@@ -108,7 +108,7 @@ async function loadProps(){
   document.getElementById('props-body').innerHTML='<div class="tl"><span class="td">SYS&gt;</span><span class="ta">fetching props...</span></div>';
   const market=document.getElementById('prop-type').value;
   try{
-    const data=await proxyOdds(`sports/${currentSport}/props/`,{regions:'us,us2',markets:market,oddsFormat:'american',bookmakers:'hardrockbet,fanduel,draftkings,betmgm'});
+    const data=await proxyOdds(`sports/${currentSport}/odds/`,{regions:'us,us2',markets:market,oddsFormat:'american',bookmakers:'hardrockbet,fanduel,draftkings,betmgm'});
     propsData=[];
     (Array.isArray(data)?data:[]).forEach(game=>{
       game.bookmakers?.forEach(book=>{book.markets?.forEach(mkt=>{mkt.outcomes?.forEach(outcome=>{
@@ -123,7 +123,20 @@ async function loadProps(){
     document.getElementById('k-overs').textContent=overs;
     document.getElementById('k-unders').textContent=unders;
     renderProps();sbLog(`${propsData.length} props`,'ok');
-  }catch(e){document.getElementById('props-body').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;sbLog(e.message,'err');}
+  }catch(e){
+    let msg = e.message;
+    if(msg.includes('500') || msg.includes('422')) {
+      msg = 'Player props not available — your Odds API plan may not include player props. Check the-odds-api.com for plan details.';
+    } else if(msg.includes('401') || msg.includes('403')) {
+      msg = 'API key issue — check your Odds API key in Settings.';
+    } else if(msg.includes('429')) {
+      msg = 'Rate limit hit — too many requests. Wait a minute and try again.';
+    }
+    document.getElementById('props-body').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span style="color:#cc3333;">${msg}</span></div>
+      <div class="tl" style="margin-top:8px;"><span class="td">INFO</span><span style="color:#2a6a2a;">Player props require the "player-props" add-on at the-odds-api.com</span></div>
+      <div class="tl"><span class="td">COST</span><span style="color:#2a6a2a;">~$5/mo extra · Worth it for prop betting edge</span></div>`;
+    sbLog(e.message,'err');
+  }
 }
 function renderProps(){
   const search=(document.getElementById('prop-search')?.value||'').toLowerCase();
