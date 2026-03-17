@@ -207,103 +207,157 @@ app.post('/api/clv', (req, res) => {
   const entry = { ...req.body, id: Date.now(), date: new Date().toLocaleDateString() };
   clv.push(entry); saveClv(clv); res.json(entry);
 });
-// GET /api/clv/closing/:sportKey/:team — fetch current closing odds for a team
-// Used by CLV page to auto-fill closing line
+// GET /api/clv/closing/:sport/:team
+// CLV closing line strategy:
+//   1. Check Odds API SCORES endpoint for completed games (has closing line data)
+//   2. If game is still upcoming/live — fetch current pre-game odds (best available)
+//   3. Return odds + whether game is final so UI can show correct status
 app.get('/api/clv/closing/:sport/:team', async (req, res) => {
   const cfg = loadConfig();
   if (!cfg.oddsKey) return res.json({ error: 'No odds API key', odds: null });
 
   const sportParam = req.params.sport;
-  const team  = decodeURIComponent(req.params.team).toLowerCase().trim();
+  const team = decodeURIComponent(req.params.team).toLowerCase().trim();
+  if (!team || team.length < 2) return res.json({ ok: false, error: 'Team name too short' });
 
-  // Build list of sport keys to try — always try the given sport first, then fallback
   const ALL_SPORTS = ['basketball_nba','americanfootball_nfl','baseball_mlb','icehockey_nhl','basketball_ncaab'];
   const SPORT_FALLBACKS = {
-    'basketball_nba':        ['basketball_nba','basketball_ncaab'],
-    'americanfootball_nfl':  ['americanfootball_nfl','americanfootball_ncaaf'],
-    'baseball_mlb':          ['baseball_mlb'],
-    'icehockey_nhl':         ['icehockey_nhl'],
-    'soccer_epl':            ['soccer_epl','soccer_usa_mls'],
-    'basketball_ncaab':      ['basketball_ncaab','basketball_nba'],
-    'all':                   ALL_SPORTS,  // try everything for PARLAY/SHARP/unknown
+    'basketball_nba':       ['basketball_nba'],
+    'americanfootball_nfl': ['americanfootball_nfl'],
+    'baseball_mlb':         ['baseball_mlb'],
+    'icehockey_nhl':        ['icehockey_nhl'],
+    'soccer_epl':           ['soccer_epl'],
+    'basketball_ncaab':     ['basketball_ncaab'],
+    'all':                  ALL_SPORTS,
   };
-  // For PARLAY / SHARP / unknown — try everything
   const sportsToTry = SPORT_FALLBACKS[sportParam] || ALL_SPORTS;
 
+  // Team fuzzy match helper
+  function teamMatches(apiTeam, query) {
+    if (!apiTeam || !query) return false;
+    const a = apiTeam.toLowerCase();
+    const q = query.toLowerCase().trim();
+    if (a.includes(q) || q.includes(a)) return true;
+    const apiWords   = a.split(' ');
+    const queryWords = q.split(' ');
+    for (const qw of queryWords) {
+      if (qw.length < 3) continue;
+      for (const aw of apiWords) {
+        if (aw.length < 3) continue;
+        if (aw === qw || aw.includes(qw) || qw.includes(aw)) return true;
+      }
+    }
+    return false;
+  }
+
   try {
-    let games = [];
+    // Step 1: Try Odds API /scores endpoint — returns completed + in-progress games
+    // The scores endpoint returns last_h2h which IS the closing line data
+    for (const sport of sportsToTry) {
+      try {
+        const scoresUrl = `https://api.the-odds-api.com/v4/sports/${sport}/scores/?apiKey=${cfg.oddsKey}&daysFrom=3`;
+        const sr = await fetch(scoresUrl);
+        if (!sr.ok) continue;
+        const scores = await sr.json();
+        if (!Array.isArray(scores)) continue;
+
+        for (const game of scores) {
+          const awayMatch = teamMatches(game.away_team, team);
+          const homeMatch = teamMatches(game.home_team, team);
+          if (!awayMatch && !homeMatch) continue;
+
+          const side      = awayMatch ? game.away_team : game.home_team;
+          const isComplete = game.completed || false;
+
+          // For completed games, fetch the historical odds (closing line)
+          // Use /odds endpoint with the specific event
+          try {
+            const oddsUrl = `https://api.the-odds-api.com/v4/sports/${sport}/events/${game.id}/odds?apiKey=${cfg.oddsKey}&regions=us,us2&markets=h2h,spreads&oddsFormat=american&bookmakers=hardrockbet,fanduel,draftkings,betmgm`;
+            const or = await fetch(oddsUrl);
+            if (or.ok) {
+              const oddsData = await or.json();
+              let bestOdds = null, bestBook = null;
+              for (const book of (oddsData.bookmakers || [])) {
+                for (const market of (book.markets || [])) {
+                  if (!['h2h','spreads'].includes(market.key)) continue;
+                  const outcome = market.outcomes?.find(o => o.name === side);
+                  if (!outcome) continue;
+                  if (bestOdds === null || Math.abs(outcome.price) < Math.abs(bestOdds)) {
+                    bestOdds = outcome.price;
+                    bestBook = book.key;
+                  }
+                }
+                if (bestOdds !== null) break;
+              }
+              if (bestOdds !== null) {
+                addLog('info', 'CLV', `Closing line: ${side}`, `${bestOdds} @ ${bestBook} (${isComplete ? 'FINAL' : 'LIVE'})`);
+                return res.json({
+                  ok: true, odds: bestOdds, book: bestBook,
+                  team: side, game: `${game.away_team} @ ${game.home_team}`,
+                  isFinal: isComplete,
+                  status: isComplete ? 'FINAL' : 'LIVE'
+                });
+              }
+            }
+          } catch(e) {}
+
+          // Event odds not available — game too old or not in API
+          // Return scores data we have as confirmation game was found
+          if (isComplete) {
+            return res.json({
+              ok: false, team: side, isFinal: true,
+              game: `${game.away_team} @ ${game.home_team}`,
+              error: 'Game final but closing odds not in API — enter manually'
+            });
+          }
+        }
+      } catch(e) { continue; }
+    }
+
+    // Step 2: Game not in scores — try live pre-game odds as best available line
     for (const sport of sportsToTry) {
       try {
         const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${cfg.oddsKey}&regions=us,us2&markets=h2h,spreads&oddsFormat=american&bookmakers=hardrockbet,fanduel,draftkings,betmgm`;
         const r = await fetch(url);
         if (!r.ok) continue;
-        const data = await r.json();
-        if (Array.isArray(data) && data.length) games = games.concat(data);
+        const games = await r.json();
+        if (!Array.isArray(games)) continue;
+
+        for (const game of games) {
+          const awayMatch = teamMatches(game.away_team, team);
+          const homeMatch = teamMatches(game.home_team, team);
+          if (!awayMatch && !homeMatch) continue;
+
+          const side = awayMatch ? game.away_team : game.home_team;
+          let bestOdds = null, bestBook = null;
+
+          for (const mktKey of ['h2h', 'spreads']) {
+            for (const book of (game.bookmakers || [])) {
+              const market = book.markets?.find(m => m.key === mktKey);
+              const outcome = market?.outcomes?.find(o => o.name === side);
+              if (!outcome) continue;
+              if (bestOdds === null || Math.abs(outcome.price) < Math.abs(bestOdds)) {
+                bestOdds = outcome.price;
+                bestBook = book.key;
+              }
+            }
+            if (bestOdds !== null) break;
+          }
+
+          if (bestOdds !== null) {
+            addLog('info', 'CLV', `Pre-game line: ${side}`, `${bestOdds} @ ${bestBook}`);
+            return res.json({
+              ok: true, odds: bestOdds, book: bestBook,
+              team: side, game: `${game.away_team} @ ${game.home_team}`,
+              isFinal: false, status: 'PRE-GAME'
+            });
+          }
+        }
       } catch(e) { continue; }
     }
 
-    // Fuzzy match helper — handles multi-word team names
-    function teamMatches(apiTeam, query) {
-      if (!apiTeam || !query) return false;
-      const a = apiTeam.toLowerCase();
-      const q = query.toLowerCase().trim();
-      if (!q || q.length < 2) return false;
-      // Exact contains
-      if (a.includes(q) || q.includes(a)) return true;
-      // Last word of API team matches any word in query (e.g. "Rockets" in "Houston Rockets ML")
-      const apiWords  = a.split(' ');
-      const queryWords = q.split(' ');
-      const apiLast   = apiWords[apiWords.length - 1];
-      // Any significant query word matches any API word
-      for (const qw of queryWords) {
-        if (qw.length < 3) continue;  // skip short words
-        for (const aw of apiWords) {
-          if (aw.length < 3) continue;
-          if (aw.includes(qw) || qw.includes(aw)) return true;
-        }
-      }
-      return false;
-    }
-
-    let foundGame = null, foundOdds = null;
-
-    for (const game of (Array.isArray(games) ? games : [])) {
-      const awayMatch = teamMatches(game.away_team, team);
-      const homeMatch = teamMatches(game.home_team, team);
-      if (!awayMatch && !homeMatch) continue;
-
-      foundGame = game;
-      const side = awayMatch ? game.away_team : game.home_team;
-
-      // Find best ML odds first, then spread — prefer ML for CLV
-      let bestOdds = null, bestBook = null;
-      // Priority: h2h (ML) first, then spreads
-      for (const marketKey of ['h2h', 'spreads']) {
-        for (const book of (game.bookmakers || [])) {
-          const market = book.markets?.find(m => m.key === marketKey);
-          if (!market) continue;
-          const outcome = market.outcomes?.find(o => o.name === side);
-          if (!outcome) continue;
-          // Pick tightest (closest to even) odds — most representative closing line
-          if (bestOdds === null || Math.abs(outcome.price) < Math.abs(bestOdds)) {
-            bestOdds = outcome.price;
-            bestBook = book.key;
-          }
-        }
-        if (bestOdds !== null) break; // found ML, don't need spread
-      }
-
-      if (bestOdds !== null) {
-        foundOdds = { team: side, odds: bestOdds, book: bestBook, game: `${game.away_team} @ ${game.home_team}` };
-        break;
-      }
-    }
-
-    if (foundOdds) {
-      addLog('info', 'CLV', `Closing odds found for ${team}`, `${foundOdds.odds} @ ${foundOdds.book}`);
-      return res.json({ ok: true, ...foundOdds });
-    }
-    return res.json({ ok: false, error: 'Team not found in current odds', odds: null });
+    addLog('info', 'CLV', `No odds found for: ${team}`, `Sports tried: ${sportsToTry.join(',')}`);
+    return res.json({ ok: false, error: `No current odds found for "${team}" — game may be completed and removed from API`, odds: null });
 
   } catch(e) {
     addLog('error', 'CLV', `Closing odds fetch failed`, e.message);

@@ -93,7 +93,10 @@
         <div class="t-sec" style="margin-top:12px;"><span>// HOW TO CALCULATE</span></div>
         <div class="tl"><span class="td">FORMULA</span><span>CLV = (Your Implied %) − (Closing Implied %)</span></div>
         <div class="tl"><span class="td">EXAMPLE</span><span>You bet -115 (46.5% impl), closed -125 (55.6% impl) → CLV = −9.1</span></div>
-        <div class="tl"><span class="td">AUTO</span><span>Use AUTO-CAPTURE to pull live closing odds from Odds API automatically</span></div>
+        <div class="tl"><span class="td">AUTO</span><span>AUTO-CAPTURE fetches the closing line from Odds API <strong style="color:#00ff41;">at game time</strong></span></div>
+        <div class="tl"><span class="td">FINAL</span><span class="tg">Best — game over, true closing line captured via scores API</span></div>
+        <div class="tl"><span class="td">PRE-GAME</span><span class="ty">Good — game hasn't started, capture now to lock in closing line</span></div>
+        <div class="tl"><span class="td">MANUAL</span><span style="color:#2a6a2a;">Enter closing odds yourself — check the book you bet with</span></div>
       </div>
 
     </div>
@@ -248,7 +251,8 @@ async function fetchClosingOdds() {
     const d = await r.json();
     if (d.ok && d.odds !== null) {
       document.getElementById('m-close-odds').value = d.odds;
-      document.getElementById('m-status').textContent = `✓ Found: ${d.game} @ ${d.book} (${fmtOdds(d.odds)})`;
+      const statusTag = d.isFinal ? '✓ FINAL closing line' : d.status === 'PRE-GAME' ? '⚡ Pre-game line (save before tip-off)' : '● Live line';
+      document.getElementById('m-status').textContent = `${statusTag}: ${d.game} (${fmtOdds(d.odds)} @ ${d.book})`;
       autoCalcCLV();
       btn.textContent = '✓'; btn.className = 'auto-btn done';
     } else {
@@ -356,8 +360,10 @@ function renderEntries() {
         <td style="color:#1e4a1e;white-space:nowrap;">${e.date||'—'}</td>
         <td style="color:#00cc33;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.bet}">${e.bet||'—'}</td>
         <td style="color:#aacc00;">${e.betOdds ? fmtOdds(e.betOdds) : '—'}</td>
-        <td style="display:flex;align-items:center;gap:4px;">
+        <td style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
           <span style="color:#2a6a2a;">${e.closeOdds ? fmtOdds(e.closeOdds) : '—'}</span>
+          ${e.closeStatus === 'FINAL' ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:#1e4a1e;letter-spacing:1px;">FINAL</span>' : ''}
+          ${e.closeStatus === 'PRE-GAME' ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:#aa9900;letter-spacing:1px;">PRE</span>' : ''}
           ${!e.closeOdds ? `<button class="auto-btn" onclick="autoFillEntry(${e.id})" title="Fetch closing odds">⚡</button>` : ''}
         </td>
         <td class="${clvCls}" style="font-weight:700;">${clvStr}</td>
@@ -390,12 +396,19 @@ async function autoFillEntry(id) {
       await fetch(`${API}/api/clv/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...e, closeOdds: d.odds, clv: parseFloat(clv) })
+        body: JSON.stringify({ ...e, closeOdds: d.odds, clv: parseFloat(clv), closeStatus: d.status || 'captured' })
       });
-      sbLog(`CLV captured: ${e.bet?.slice(0,20)} → ${clv >= 0 ? '+' : ''}${clv}`, 'ok');
+      const statusTag = d.isFinal ? '[FINAL]' : d.status === 'PRE-GAME' ? '[PRE-GAME line]' : '[LIVE]';
+      sbLog(`CLV ${statusTag}: ${e.bet?.slice(0,20)} → ${clv >= 0 ? '+' : ''}${clv}`, 'ok');
       await load();
+    } else if (!d.ok && d.isFinal) {
+      // Game found and is final but odds not available — mark as needs manual entry
+      sbLog(`${d.team || teamGuess} — game final, enter closing odds manually`, 'warn');
+      if (btn) { btn.textContent = '✎'; btn.className = 'auto-btn'; }
+      // Open edit modal pre-filled
+      setTimeout(() => editEntry(id), 300);
     } else {
-      sbLog(`No odds today: ${teamGuess}`, 'warn');
+      sbLog(`No odds found: ${teamGuess} — game not in API`, 'warn');
       if (btn) { btn.textContent = '—'; btn.className = 'auto-btn'; }
     }
   } catch(err) {
