@@ -1127,11 +1127,11 @@ app.get('/api/sao/test', async (req, res) => {
   const results = await Promise.allSettled([
     fetch('https://contests.covers.com/consensus/topconsensus/nba/overall', {
       headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(8000)
     }).then(r => ({ source: 'covers', ok: r.ok, status: r.status })),
     fetch('https://www.scoresandodds.com/nba', {
       headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(8000)
     }).then(r => ({ source: 'sao', ok: r.ok, status: r.status })),
   ]);
 
@@ -1390,7 +1390,7 @@ async function espnFetch(url, cacheMins = 5) {
   const cached = getCached(cacheKey, cacheMins * 60 * 1000);
   if (cached) return cached;
   const ctrl = new AbortController();
-  const tmt  = setTimeout(() => ctrl.abort(), 5000); // 5s timeout — never block forever
+  const tmt  = setTimeout(() => ctrl.abort(), 12000); // 12s timeout — ESPN can be slow
   try {
     const r = await fetch(url, {
       headers: { 'Accept':'application/json', 'User-Agent':'Mozilla/5.0' },
