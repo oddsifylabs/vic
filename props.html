@@ -41,7 +41,16 @@
     </div>
     <div style="display:flex;gap:8px;padding:6px 16px;border-bottom:1px solid #0f2010;background:#050b05;flex-shrink:0;flex-wrap:wrap;">
       <select class="t-select" id="prop-type" onchange="loadProps()" style="font-size:10px;">
-        <option value="player_points">Points</option><option value="player_rebounds">Rebounds</option>
+        <option value="player_points">Points</option>
+          <option value="player_rebounds">Rebounds</option>
+          <option value="player_assists">Assists</option>
+          <option value="player_threes">3-Pointers Made</option>
+          <option value="player_points_rebounds_assists">PRA</option>
+          <option value="player_points_rebounds">Points + Rebounds</option>
+          <option value="player_points_assists">Points + Assists</option>
+          <option value="player_steals">Steals</option>
+          <option value="player_blocks">Blocks</option>
+          <option value="player_turnovers">Turnovers</option>
         <option value="player_assists">Assists</option><option value="player_threes">3-Pointers</option>
         <option value="player_points_rebounds_assists">PRA</option>
       </select>
@@ -82,7 +91,17 @@ function selectSport(sport,el){
   if(sport.includes('baseball'))propSel.innerHTML='<option value="batter_hits">Hits</option><option value="batter_home_runs">HRs</option><option value="pitcher_strikeouts">Ks</option>';
   else if(sport.includes('hockey'))propSel.innerHTML='<option value="player_goals">Goals</option><option value="player_shots_on_goal">Shots</option><option value="player_assists">Assists</option>';
   else if(sport.includes('football'))propSel.innerHTML='<option value="player_pass_yds">Pass Yds</option><option value="player_rush_yds">Rush Yds</option><option value="player_reception_yds">Rec Yds</option><option value="player_receptions">Receptions</option>';
-  else propSel.innerHTML='<option value="player_points">Points</option><option value="player_rebounds">Rebounds</option><option value="player_assists">Assists</option><option value="player_threes">3-Pointers</option><option value="player_points_rebounds_assists">PRA</option>';
+  else if(['americanfootball_nfl','americanfootball_ncaaf'].includes(sport)){
+    propSel.innerHTML='<option value="player_pass_yds">Pass Yards</option><option value="player_pass_tds">Pass TDs</option><option value="player_rush_yds">Rush Yards</option><option value="player_reception_yds">Rec Yards</option><option value="player_receptions">Receptions</option><option value="player_anytime_td">Anytime TD</option>';
+  } else if(['baseball_mlb','baseball_college_baseball'].includes(sport)){
+    propSel.innerHTML='<option value="batter_hits">Hits</option><option value="batter_home_runs">Home Runs</option><option value="batter_rbis">RBIs</option><option value="batter_strikeouts">Batter Strikeouts</option><option value="pitcher_strikeouts">Pitcher Ks</option><option value="pitcher_hits_allowed">Hits Allowed</option>';
+  } else if(['icehockey_nhl'].includes(sport)){
+    propSel.innerHTML='<option value="player_points">Points</option><option value="player_goals">Goals</option><option value="player_assists">Assists</option><option value="player_shots_on_goal">Shots on Goal</option>';
+  } else if(sport.startsWith('tennis')){
+    propSel.innerHTML='<option value="player_games">Games Won</option><option value="player_sets">Sets Won</option><option value="player_aces">Aces</option><option value="player_double_faults">Double Faults</option>';
+  } else {
+    propSel.innerHTML='<option value="player_points">Points</option><option value="player_rebounds">Rebounds</option><option value="player_assists">Assists</option><option value="player_threes">3-Pointers</option><option value="player_points_rebounds_assists">PRA</option><option value="player_steals">Steals</option><option value="player_blocks">Blocks</option>';
+  }
   loadProps();
 }
 async function loadProps(){
