@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Vegas Intelligence Console</title>
+<meta name="description" content="AI-powered sharp betting software that runs locally. Live odds, edge model, CLV tracking, sharp money detection. No subscriptions. Your data never leaves your machine.">
+<link rel="icon" href="vic_icon.jpeg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --g:#00ff41; --gm:#00cc33; --gd:#2a8a2a; --gdim:#0f2010;
+  --bg:#030803; --s1:#050b05; --s2:#080e08;
+  --tx:#c8f5c8; --tx2:#4a8a4a; --tx3:#2a5a2a;
+  --mono:'JetBrains Mono',monospace;
+  --display:'Syne',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--tx);font-family:var(--mono);overflow-x:hidden;line-height:1.6}
+
+/* scanlines */
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,65,.008) 3px,rgba(0,255,65,.008) 4px)}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;height:56px;
+  background:rgba(3,8,3,.95);border-bottom:1px solid var(--gdim);backdrop-filter:blur(16px);
+  display:flex;align-items:center;justify-content:space-between;padding:0 40px}
+.n-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.n-badge{width:28px;height:28px;background:var(--g);border-radius:3px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;color:#030803;letter-spacing:1px}
+.n-name{font-size:13px;font-weight:700;color:var(--g);letter-spacing:3px}
+.n-links{display:flex;gap:28px}
+.n-link{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--tx3);text-decoration:none;transition:color .12s}
+.n-link:hover{color:var(--gm)}
+.n-cta{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  padding:8px 20px;border:1px solid var(--g);color:var(--g);
+  text-decoration:none;border-radius:2px;transition:all .12s}
+.n-cta:hover{background:rgba(0,255,65,.1)}
+
+/* ── HERO ── */
+.hero{min-height:100vh;display:grid;place-items:center;padding:100px 40px 60px;
+  position:relative;text-align:center}
+.hero-glow{position:absolute;top:-100px;left:50%;transform:translateX(-50%);
+  width:800px;height:600px;pointer-events:none;
+  background:radial-gradient(ellipse,rgba(0,255,65,.07) 0%,transparent 60%)}
+
+.hero-eyebrow{display:inline-flex;align-items:center;gap:10px;
+  font-size:9px;font-weight:700;letter-spacing:4px;text-transform:uppercase;
+  color:var(--gd);border:1px solid var(--gdim);padding:6px 16px;border-radius:2px;
+  margin-bottom:32px;background:rgba(0,255,65,.03)}
+.hero-eyebrow span{width:6px;height:6px;border-radius:50%;background:var(--g);
+  animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,255,65,.4)}
+  50%{opacity:.7;box-shadow:0 0 0 6px rgba(0,255,65,0)}}
+
+h1{font-family:var(--display);font-size:clamp(52px,9vw,110px);
+  font-weight:800;line-height:.95;letter-spacing:-2px;margin-bottom:24px}
+h1 .w1{color:var(--g);text-shadow:0 0 60px rgba(0,255,65,.3);display:block}
+h1 .w2{color:#1a3a1a;display:block}
+h1 .w3{color:var(--gm);display:block}
+
+.hero-sub{font-size:clamp(13px,2vw,18px);color:var(--tx3);letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:20px}
+.hero-p{font-size:16px;color:var(--tx2);max-width:520px;margin:0 auto 40px;
+  line-height:1.8;font-family:'JetBrains Mono',monospace}
+.hero-p strong{color:var(--tx);font-weight:700}
+
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:64px}
+.btn-solid{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  padding:14px 36px;background:var(--g);color:#030803;border:none;border-radius:2px;
+  cursor:pointer;text-decoration:none;transition:all .15s;display:inline-flex;align-items:center;gap:8px}
+.btn-solid:hover{background:#00e639;transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,255,65,.2)}
+.btn-ghost{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  padding:14px 36px;background:transparent;color:var(--gd);
+  border:1px solid #1a4a1a;border-radius:2px;cursor:pointer;text-decoration:none;
+  transition:all .15s;display:inline-flex;align-items:center;gap:8px}
+.btn-ghost:hover{border-color:var(--gd);color:var(--gm)}
+
+/* ── TERMINAL ── */
+.terminal{max-width:780px;margin:0 auto;background:var(--s1);
+  border:1px solid var(--gdim);border-radius:4px;
+  box-shadow:0 0 80px rgba(0,255,65,.07),0 40px 80px rgba(0,0,0,.6);overflow:hidden}
+.term-bar{background:var(--s2);border-bottom:1px solid var(--gdim);
+  padding:10px 16px;display:flex;align-items:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot.r{background:#4a1010}.dot.y{background:#3a3000}.dot.g{background:var(--g);box-shadow:0 0 6px var(--g)}
+.term-url{font-size:9px;color:#1e4a1e;margin-left:8px;letter-spacing:1px}
+.term-body{padding:20px 24px}
+.tl{display:flex;gap:10px;font-size:12px;line-height:2.1}
+.p{color:#1e4a1e;flex-shrink:0;min-width:44px}.c{color:var(--g)}
+.o{color:var(--gd)}.hot{color:#cc3333}.hit{color:#aacc00;font-weight:700}
+.dim{color:#1a3a1a}.cur{display:inline-block;width:8px;height:14px;
+  background:var(--g);vertical-align:middle;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* ── PROOF BAR ── */
+.proof{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  background:var(--gdim);border:1px solid var(--gdim);margin:80px 40px}
+.proof-cell{background:var(--s1);padding:28px 20px;text-align:center}
+.proof-num{font-family:var(--display);font-size:48px;font-weight:800;
+  color:var(--g);line-height:1;text-shadow:0 0 24px rgba(0,255,65,.25)}
+.proof-lbl{font-size:8px;letter-spacing:2.5px;text-transform:uppercase;color:var(--tx3);margin-top:6px}
+
+/* ── SECTIONS ── */
+.sec{padding:80px 40px;position:relative}
+.sec-label{font-size:8px;font-weight:700;letter-spacing:4px;text-transform:uppercase;
+  color:var(--gd);margin-bottom:10px}
+h2{font-family:var(--display);font-size:clamp(28px,4vw,52px);font-weight:800;
+  line-height:1.1;color:var(--tx);margin-bottom:14px}
+h2 em{color:var(--g);font-style:normal}
+.sec-p{font-size:14px;color:var(--tx2);max-width:500px;line-height:1.8}
+
+/* ── FEATURE GRID ── */
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+  background:var(--gdim);border:1px solid var(--gdim);margin-top:52px}
+.feat{background:var(--s1);padding:32px 24px;transition:background .12s;position:relative;overflow:hidden}
+.feat::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:transparent;transition:background .2s}
+.feat:hover{background:var(--s2)}
+.feat:hover::before{background:var(--g)}
+.feat-ico{font-size:24px;margin-bottom:14px;display:block}
+.feat-name{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--gm);margin-bottom:8px}
+.feat-desc{font-size:13px;color:var(--tx2);line-height:1.7}
+.feat-pill{display:inline-block;margin-top:12px;font-size:8px;letter-spacing:1.5px;
+  padding:2px 8px;border:1px solid var(--gdim);color:var(--tx3);border-radius:2px}
+.feat-pill.ai{border-color:#2a1a00;color:#aacc00}
+
+/* ── SPLIT SECTION (compare) ── */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:1px;
+  background:var(--gdim);border:1px solid var(--gdim);margin-top:52px}
+.cmp-side{background:var(--s1);padding:36px 28px}
+.cmp-side.good{border-left:3px solid var(--g)}
+.cmp-title{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px}
+.cmp-title.bad{color:#cc3333}.cmp-title.good{color:var(--g)}
+.cmp-item{display:flex;gap:12px;align-items:flex-start;padding:10px 0;
+  border-bottom:1px solid var(--gdim);font-size:13px;line-height:1.6}
+.cmp-item:last-child{border-bottom:none}
+.cmp-ico{flex-shrink:0;font-size:12px;margin-top:2px}
+
+/* ── HOW IT WORKS ── */
+.steps{display:flex;flex-direction:column;gap:0;margin-top:52px;max-width:660px}
+.step{display:grid;grid-template-columns:56px 1fr;gap:24px;padding:28px 0;
+  border-bottom:1px solid var(--gdim);transition:padding-left .15s}
+.step:last-child{border-bottom:none}
+.step:hover{padding-left:8px}
+.step-n{font-family:var(--display);font-size:36px;font-weight:800;
+  color:var(--gdim);line-height:1;align-self:start;transition:color .2s}
+.step:hover .step-n{color:var(--gd)}
+.step-title{font-size:16px;font-weight:700;color:var(--tx);margin-bottom:6px}
+.step-desc{font-size:13px;color:var(--tx2);line-height:1.7}
+code{font-family:var(--mono);font-size:11px;color:var(--gm);
+  background:var(--s2);border:1px solid var(--gdim);padding:2px 8px;border-radius:2px}
+
+/* ── TOOLS ── */
+.tools-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
+  background:var(--gdim);border:1px solid var(--gdim);margin-top:52px}
+.tool{background:var(--s1);padding:18px 22px;display:flex;gap:14px;
+  align-items:center;transition:background .12s}
+.tool:hover{background:var(--s2)}
+.tool-ico{font-size:18px;flex-shrink:0;width:32px;text-align:center}
+.tool-name{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--gm);margin-bottom:2px}
+.tool-desc{font-size:12px;color:var(--tx3)}
+
+/* ── PRIVACY ── */
+.priv{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+  background:var(--gdim);border:1px solid var(--gdim);
+  border-left:3px solid var(--g);margin-top:52px}
+.priv-cell{background:var(--s1);padding:28px 24px}
+.priv-title{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--gm);margin-bottom:8px}
+.priv-desc{font-size:13px;color:var(--tx2);line-height:1.7}
+
+/* ── PRICING ── */
+.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:52px}
+.price-card{background:var(--s1);border:1px solid var(--gdim);padding:32px 24px;
+  border-radius:2px;position:relative;transition:border-color .2s}
+.price-card:hover{border-color:var(--gd)}
+.price-card.hot{border-color:var(--g);box-shadow:0 0 40px rgba(0,255,65,.07)}
+.hot-label{position:absolute;top:-1px;right:20px;
+  font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  background:var(--g);color:#030803;padding:3px 10px;border-radius:0 0 4px 4px}
+.pt{font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--tx3);margin-bottom:14px}
+.pa{font-family:var(--display);font-size:44px;font-weight:800;color:var(--tx);line-height:1}
+.pa sub{font-size:18px;color:var(--tx2);font-weight:400;vertical-align:super}
+.pp{font-size:10px;color:var(--tx3);letter-spacing:1px;margin-bottom:24px;margin-top:4px}
+.pf{list-style:none;display:flex;flex-direction:column;gap:9px;margin-bottom:28px}
+.pf li{font-size:13px;color:var(--tx2);display:flex;gap:10px;line-height:1.5}
+.pf li::before{content:'✓';color:var(--gd);flex-shrink:0;font-weight:700}
+.pf li.no{color:var(--tx3)}
+.pf li.no::before{content:'—';color:var(--gdim)}
+.pbtn{width:100%;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  padding:12px;border-radius:2px;cursor:pointer;transition:all .15s}
+.pbtn.outline{background:transparent;border:1px solid #1a4a1a;color:var(--tx3)}
+.pbtn.outline:hover{border-color:var(--gd);color:var(--gm)}
+.pbtn.filled{background:var(--g);border:none;color:#030803}
+.pbtn.filled:hover{background:#00e639}
+.price-note{font-size:9px;color:var(--tx3);text-align:center;margin-top:16px;letter-spacing:1px}
+
+/* ── CTA ── */
+.cta-sec{text-align:center;padding:120px 40px;
+  border-top:1px solid var(--gdim);
+  background:linear-gradient(180deg,transparent,rgba(0,255,65,.02))}
+.cta-h{font-family:var(--display);font-size:clamp(32px,6vw,72px);
+  font-weight:800;color:var(--g);margin-bottom:16px;
+  text-shadow:0 0 60px rgba(0,255,65,.2)}
+.cta-p{font-size:16px;color:var(--tx2);margin-bottom:40px}
+.cta-note{font-size:9px;color:var(--tx3);margin-top:20px;letter-spacing:1.5px}
+
+/* ── FOOTER ── */
+footer{border-top:1px solid var(--gdim);background:var(--s1);padding:32px 40px;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.f-logo{font-size:10px;font-weight:700;letter-spacing:3px;color:var(--gd)}
+.f-links{display:flex;gap:24px}
+.f-link{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--tx3);text-decoration:none;transition:color .12s}
+.f-link:hover{color:var(--gm)}
+.f-copy{font-size:9px;color:var(--gdim);letter-spacing:1px}
+
+/* ── DIVIDERS ── */
+.hr{height:1px;background:var(--gdim);margin:0 40px}
+
+/* ── ANIM ── */
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .65s ease,transform .65s ease}
+.reveal.in{opacity:1;transform:translateY(0)}
+.reveal-d1{transition-delay:.1s}.reveal-d2{transition-delay:.2s}.reveal-d3{transition-delay:.3s}
+
+@media(max-width:860px){
+  nav{padding:0 20px}.n-links{display:none}
+  h1{font-size:52px}.proof{grid-template-columns:1fr 1fr;margin:60px 20px}
+  .sec{padding:60px 20px}.feat-grid{grid-template-columns:1fr}
+  .compare{grid-template-columns:1fr}.tools-grid{grid-template-columns:1fr}
+  .price-grid{grid-template-columns:1fr}.priv{grid-template-columns:1fr}
+  footer{flex-direction:column;text-align:center}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="landing.html" class="n-logo">
+    <div class="n-badge">VIC</div>
+    <span class="n-name">VIC</span>
+  </a>
+  <div class="n-links">
+    <a href="#features" class="n-link">Features</a>
+    <a href="#workflow" class="n-link">How It Works</a>
+    <a href="#tools" class="n-link">Tools</a>
+    <a href="#pricing" class="n-link">Pricing</a>
+  </div>
+  <a href="index.html" class="n-cta">⚡ Open App</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div style="position:relative;z-index:1;width:100%;max-width:900px">
+
+    <div class="hero-eyebrow">
+      <span></span>
+      Local-first · No subscription · Your data stays on your machine
+    </div>
+
+    <h1>
+      <span class="w1">SHARP</span>
+      <span class="w2">BETTING</span>
+      <span class="w3">INTEL</span>
+    </h1>
+    <div class="hero-sub">Vegas Intelligence Console — v3</div>
+    <p class="hero-p">
+      <strong>AI edge models. Live odds. CLV tracking.</strong><br>
+      The full intelligence stack serious bettors use —<br>
+      running privately on your own machine.
+    </p>
+
+    <div class="hero-btns">
+      <a href="index.html" class="btn-solid">⚡ Open VIC Dashboard</a>
+      <a href="#features" class="btn-ghost">See What's Inside</a>
+    </div>
+
+    <!-- Live terminal demo -->
+    <div class="terminal reveal">
+      <div class="term-bar">
+        <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+        <span class="term-url">VIC INTELLIGENCE TERMINAL v3 · localhost:3747</span>
+      </div>
+      <div class="term-body">
+        <div class="tl"><span class="p">VIC&gt;</span><span class="c">running edge model · NBA+NHL · Tue Mar 17</span></div>
+        <div class="tl"><span class="p"></span><span class="o">✓ odds fetched — HRB / FanDuel / DK / BetMGM</span></div>
+        <div class="tl"><span class="p"></span><span class="o">✓ injuries — 4 impact players OUT tonight</span></div>
+        <div class="tl"><span class="p"></span><span class="o">✓ public % — 2 reverse line moves detected [RLM]</span></div>
+        <div class="tl"><span class="p"></span><span class="dim">─────────────────────────────────────────</span></div>
+        <div class="tl"><span class="p"></span><span class="hit">STRONG · Thunder -4.5 (-108) · 11/12 · Edge +4.2% · 1.5u</span></div>
+        <div class="tl"><span class="p"></span><span class="hit">STRONG · Rangers ML (+145) · 10/12 · Edge +3.8% · 1u [RLM]</span></div>
+        <div class="tl"><span class="p"></span><span class="o">LEAN&nbsp;&nbsp; · Celtics -7 (-112) · 8/12 · Edge +1.1% · 0.5u</span></div>
+        <div class="tl"><span class="p"></span><span class="dim">3 legs · 3.0u · AI confidence: HIGH</span></div>
+        <div class="tl" style="margin-top:4px"><span class="p">VIC&gt;</span><span id="tc"><span class="cur"></span></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF BAR -->
+<div class="proof reveal">
+  <div class="proof-cell"><div class="proof-num">20</div><div class="proof-lbl">Intel Pages</div></div>
+  <div class="proof-cell"><div class="proof-num">11</div><div class="proof-lbl">Sharp Tools</div></div>
+  <div class="proof-cell"><div class="proof-num">4</div><div class="proof-lbl">Live Sportsbooks</div></div>
+  <div class="proof-cell"><div class="proof-num" style="font-size:36px">$0.00</div><div class="proof-lbl">Data Sold — Ever</div></div>
+</div>
+
+<!-- COMPARE: THE PROBLEM -->
+<section class="sec" id="features">
+  <div class="reveal">
+    <div class="sec-label">// The Problem</div>
+    <h2>Most bettors are playing <em>blind.</em></h2>
+    <p class="sec-p">Tipping services sell picks. Spreadsheets get outdated. Gut feel isn't an edge. VIC gives you the infrastructure that sharp bettors actually use.</p>
+  </div>
+  <div class="compare reveal">
+    <div class="cmp-side">
+      <div class="cmp-title bad">❌ Without VIC</div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:#cc3333">✗</span><span style="color:#4a2a2a">Buying picks from someone you can't verify</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:#cc3333">✗</span><span style="color:#4a2a2a">Checking odds manually across 4 apps</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:#cc3333">✗</span><span style="color:#4a2a2a">No idea if you beat the closing line</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:#cc3333">✗</span><span style="color:#4a2a2a">Missing sharp money moves as they happen</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:#cc3333">✗</span><span style="color:#4a2a2a">Injury news reaching you after the line moves</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:#cc3333">✗</span><span style="color:#4a2a2a">Bet sizing based on nothing but feeling</span></div>
+    </div>
+    <div class="cmp-side good">
+      <div class="cmp-title good">✓ With VIC</div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:var(--g)">✓</span><span>AI scores every bet 1–12 with full thesis</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:var(--g)">✓</span><span>Live odds from 4 books in one terminal</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:var(--g)">✓</span><span>CLV auto-captured at close — know if you're sharp</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:var(--g)">✓</span><span>RLM + steam detection with AI summary</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:var(--g)">✓</span><span>ESPN injuries + AI impact analysis</span></div>
+      <div class="cmp-item"><span class="cmp-ico" style="color:var(--g)">✓</span><span>Kelly criterion + EV calc built in</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="hr"></div>
+
+<!-- FEATURES -->
+<section class="sec">
+  <div class="reveal">
+    <div class="sec-label">// Intelligence Stack</div>
+    <h2>Everything in <em>one terminal.</em></h2>
+    <p class="sec-p">Nine intelligence modules, all connected. What would take 6 different apps and 30 minutes of research happens in 30 seconds.</p>
+  </div>
+  <div class="feat-grid">
+    <div class="feat reveal">
+      <span class="feat-ico">⚡</span>
+      <div class="feat-name">AI Edge Model</div>
+      <p class="feat-desc">Pulls live odds, injury reports, and public betting %. Claude Sonnet scores every available bet 1–12 and ranks them by edge, returning a ready-to-act list in under 30s.</p>
+      <span class="feat-pill ai">Claude Sonnet · Web Search</span>
+    </div>
+    <div class="feat reveal reveal-d1">
+      <span class="feat-ico">📊</span>
+      <div class="feat-name">Live Odds — 4 Books</div>
+      <p class="feat-desc">Real-time spreads, totals, and money lines from Hard Rock Bet, FanDuel, DraftKings, and BetMGM. Best-line view, line movement history, and steam detection.</p>
+      <span class="feat-pill">The Odds API</span>
+    </div>
+    <div class="feat reveal reveal-d2">
+      <span class="feat-ico">🦈</span>
+      <div class="feat-name">Sharp Money Tracker</div>
+      <p class="feat-desc">Detects reverse line movement, steam moves, and ticket vs money splits across today's slate. Flags when sharp action disagrees with the public — your clearest edge signal.</p>
+      <span class="feat-pill">SAO Consensus</span>
+    </div>
+    <div class="feat reveal">
+      <span class="feat-ico">📈</span>
+      <div class="feat-name">CLV Tracker</div>
+      <p class="feat-desc">Closing line value is the only honest measure of skill. VIC auto-snapshots odds when you log a bet and captures closing lines so you know — objectively — if you're beating the market.</p>
+      <span class="feat-pill">Auto-Capture</span>
+    </div>
+    <div class="feat reveal reveal-d1">
+      <span class="feat-ico">🏥</span>
+      <div class="feat-name">Injury Intelligence</div>
+      <p class="feat-desc">Per-team ESPN injury reports with AI analysis of betting impact. Know which injuries move lines before the public catches up, and which ones are already priced in.</p>
+      <span class="feat-pill">ESPN API · Free</span>
+    </div>
+    <div class="feat reveal reveal-d2">
+      <span class="feat-ico">🎰</span>
+      <div class="feat-name">AI Parlay Finder</div>
+      <p class="feat-desc">Finds the best correlated 2 and 3-leg parlays from today's slate. Ranks by expected value and correlation — not just payout. Loads directly into the parlay builder.</p>
+      <span class="feat-pill ai">Claude Sonnet</span>
+    </div>
+    <div class="feat reveal">
+      <span class="feat-ico">📉</span>
+      <div class="feat-name">Prop Trend Finder</div>
+      <p class="feat-desc">AI scans last-5 game logs, defensive matchups, and injury news to surface the sharpest player prop bets. Works across NBA, NFL, MLB, NHL with live web search.</p>
+      <span class="feat-pill ai">AI + Web Search</span>
+    </div>
+    <div class="feat reveal reveal-d1">
+      <span class="feat-ico">🌤</span>
+      <div class="feat-name">Weather Intel</div>
+      <p class="feat-desc">Stadium weather for every NFL and MLB outdoor game. Wind speed, precipitation, temperature — automatically scored for betting impact. No manual lookups.</p>
+      <span class="feat-pill">Open-Meteo · Free</span>
+    </div>
+    <div class="feat reveal reveal-d2">
+      <span class="feat-ico">💰</span>
+      <div class="feat-name">Full Bankroll Suite</div>
+      <p class="feat-desc">P&L tracking, win rate, ROI, streaks, CLV performance. Auto-settles bets when scores come in. Monthly breakdown charts. One-click export. No spreadsheet required.</p>
+      <span class="feat-pill">Local · Private</span>
+    </div>
+  </div>
+</section>
+
+<div class="hr"></div>
+
+<!-- HOW IT WORKS -->
+<section class="sec" id="workflow" style="background:var(--s1);border-top:1px solid var(--gdim);border-bottom:1px solid var(--gdim)">
+  <div style="max-width:760px;margin:0 auto">
+    <div class="reveal">
+      <div class="sec-label">// Setup</div>
+      <h2>Running in <em>60 seconds.</em></h2>
+      <p class="sec-p">No cloud account. No installer wizard. No subscription portal. Node.js and a folder.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step">
+        <div class="step-n">01</div>
+        <div>
+          <div class="step-title">Download & extract</div>
+          <p class="step-desc">Download the ZIP. Extract to a USB drive or any folder on Windows or Linux. Nothing to install globally — all dependencies stay inside the folder.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">02</div>
+        <div>
+          <div class="step-title">Start the server</div>
+          <p class="step-desc">Double-click <code>start.bat</code> on Windows or run <code>bash start.sh</code> on Linux. First run installs Node dependencies automatically. VIC opens at <code>localhost:3747</code>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">03</div>
+        <div>
+          <div class="step-title">Add API keys</div>
+          <p class="step-desc">Go to Settings. Add your Odds API key (500 free requests/month to start) and Claude API key (pay-as-you-go, ~$2–5/month typical). ESPN, weather, and SAO scraper are completely free — no key needed.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">04</div>
+        <div>
+          <div class="step-title">Hit ⚡ Run Legs</div>
+          <p class="step-desc">VIC fetches live odds, loads injuries, checks public %, runs the AI model, and returns ranked edges with full thesis and risk notes — in under 30 seconds.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TOOLS -->
+<section class="sec" id="tools">
+  <div class="reveal">
+    <div class="sec-label">// Tools Suite</div>
+    <h2>11 calculators. <em>Zero spreadsheets.</em></h2>
+    <p class="sec-p">Every calculation a sharp bettor needs — built in, instant, connected to your live data.</p>
+  </div>
+  <div class="tools-grid reveal">
+    <div class="tool"><div class="tool-ico">📊</div><div><div class="tool-name">EV Calculator</div><div class="tool-desc">Enter odds + true probability — instant expected value</div></div></div>
+    <div class="tool"><div class="tool-ico">💰</div><div><div class="tool-name">Kelly Criterion</div><div class="tool-desc">Optimal bet sizing. Full, half, quarter Kelly with bankroll input</div></div></div>
+    <div class="tool"><div class="tool-ico">🔄</div><div><div class="tool-name">Odds Converter</div><div class="tool-desc">American ↔ Decimal ↔ Fractional ↔ Implied % live</div></div></div>
+    <div class="tool"><div class="tool-ico">🛡</div><div><div class="tool-name">Hedge Calculator</div><div class="tool-desc">Lock profit or cut risk — optimal stakes across two books</div></div></div>
+    <div class="tool"><div class="tool-ico">⚖️</div><div><div class="tool-name">Middling Finder</div><div class="tool-desc">Identify spread gaps for middle opportunities with profit calc</div></div></div>
+    <div class="tool"><div class="tool-ico">💎</div><div><div class="tool-name">Arbitrage Calculator</div><div class="tool-desc">Guaranteed profit stakes across two books. Shows exact ROI</div></div></div>
+    <div class="tool"><div class="tool-ico">🎯</div><div><div class="tool-name">De-Vigger</div><div class="tool-desc">Strip the book's vig. Find true fair odds and no-vig lines</div></div></div>
+    <div class="tool"><div class="tool-ico">🔗</div><div><div class="tool-name">Correlated Leg Finder</div><div class="tool-desc">AI finds same-game props that move together for SGP edge</div></div></div>
+    <div class="tool"><div class="tool-ico">🤖</div><div><div class="tool-name">AI Scout</div><div class="tool-desc">Research any player, team, or matchup with live web search + AI</div></div></div>
+    <div class="tool"><div class="tool-ico">📉</div><div><div class="tool-name">Prop Trend Finder</div><div class="tool-desc">Last-5 logs, matchups, injuries — edges with edge % output</div></div></div>
+    <div class="tool"><div class="tool-ico">🦈</div><div><div class="tool-name">Sharp Money Tracker</div><div class="tool-desc">RLM + steam detection. AI picks the single best sharp play</div></div></div>
+  </div>
+</section>
+
+<div class="hr"></div>
+
+<!-- PRIVACY -->
+<section class="sec">
+  <div class="reveal">
+    <div class="sec-label">// Privacy</div>
+    <h2>Your data. <em>Your machine.</em></h2>
+    <p class="sec-p">No cloud sync. No analytics. No account. VIC stores everything in a local folder — and nothing else ever knows your bets exist.</p>
+  </div>
+  <div class="priv reveal">
+    <div class="priv-cell">
+      <div class="priv-title">🔒 100% Local Storage</div>
+      <p class="priv-desc">All bets, keys, and logs live in a <code>data/</code> folder on your drive. Nothing is transmitted to any server. Works offline for everything except live odds.</p>
+    </div>
+    <div class="priv-cell">
+      <div class="priv-title">🖥 Runs On Your Machine</div>
+      <p class="priv-desc">VIC is a local Node.js app — not a SaaS product. No login, no account, no dashboard you don't control. Shut it off and nothing persists anywhere else.</p>
+    </div>
+    <div class="priv-cell">
+      <div class="priv-title">📂 USB Portable</div>
+      <p class="priv-desc">Extract to a USB drive and VIC runs on any Windows or Linux machine. Your bets, keys, and history travel with you. No re-setup, no re-login.</p>
+    </div>
+  </div>
+</section>
+
+<div class="hr"></div>
+
+<!-- PRICING -->
+<section class="sec" id="pricing" style="background:var(--s1);border-top:1px solid var(--gdim)">
+  <div class="reveal">
+    <div class="sec-label">// Pricing</div>
+    <h2>Pay the APIs. <em>Not us.</em></h2>
+    <p class="sec-p">VIC is free software. The costs below are what the external data providers charge — passed through directly with zero markup.</p>
+  </div>
+  <div class="price-grid reveal">
+
+    <div class="price-card">
+      <div class="pt">Starter</div>
+      <div class="pa"><sub>$</sub>0</div>
+      <div class="pp">per month</div>
+      <ul class="pf">
+        <li>All 20 intelligence pages</li>
+        <li>All 11 calculators</li>
+        <li>Full bet tracker + CLV</li>
+        <li>ESPN scores, news, injuries</li>
+        <li>SAO public betting %</li>
+        <li>Open-Meteo stadium weather</li>
+        <li class="no">Live odds (Odds API key needed)</li>
+        <li class="no">AI analysis (Claude key needed)</li>
+      </ul>
+      <button class="pbtn outline" onclick="location='index.html'">Get Started Free</button>
+    </div>
+
+    <div class="price-card hot">
+      <div class="hot-label">Most Used</div>
+      <div class="pt">Sharp</div>
+      <div class="pa"><sub>~$</sub>15</div>
+      <div class="pp">per month · usage-based</div>
+      <ul class="pf">
+        <li>Everything in Starter</li>
+        <li>Odds API — 500 req/mo free tier, ~$10/mo for more</li>
+        <li>Claude API — ~$2–5/mo typical (Haiku + Sonnet)</li>
+        <li>Live odds across 4 sportsbooks</li>
+        <li>AI edge model — Legs page</li>
+        <li>AI parlay finder + analysis</li>
+        <li>Prop trends + AI scout</li>
+      </ul>
+      <button class="pbtn filled" onclick="location='config.html'">Configure APIs →</button>
+    </div>
+
+    <div class="price-card">
+      <div class="pt">Power</div>
+      <div class="pa"><sub>~$</sub>30</div>
+      <div class="pp">per month · heavy usage</div>
+      <ul class="pf">
+        <li>Everything in Sharp</li>
+        <li>Higher Odds API volume</li>
+        <li>Daily briefings every day</li>
+        <li>Prop scans across full slate</li>
+        <li>Multi-sport full analysis</li>
+        <li>Sharp money scans daily</li>
+        <li>Deep AI analysis (Sonnet)</li>
+      </ul>
+      <button class="pbtn outline" onclick="location='config.html'">Configure APIs</button>
+    </div>
+
+  </div>
+  <p class="price-note">All costs go directly to the-odds-api.com and Anthropic. VIC takes nothing. No markup. No middleman.</p>
+</section>
+
+<!-- CTA -->
+<div class="cta-sec reveal">
+  <div class="cta-h">Stop guessing.<br>Start computing.</div>
+  <p class="cta-p">VIC is already running at localhost:3747. Open it now.</p>
+  <a href="index.html" class="btn-solid" style="font-size:12px;padding:16px 44px">⚡ Open VIC Dashboard</a>
+  <p class="cta-note">Local app · No account · No subscription · Your data stays yours</p>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="f-logo">VIC — VEGAS INTELLIGENCE CONSOLE</div>
+  <div class="f-links">
+    <a href="index.html" class="f-link">Dashboard</a>
+    <a href="picks.html" class="f-link">Legs</a>
+    <a href="tools.html" class="f-link">Tools</a>
+    <a href="tracker.html" class="f-link">Tracker</a>
+    <a href="config.html" class="f-link">Settings</a>
+  </div>
+  <div class="f-copy">VIC v3 · Node.js + Claude API · Local · Private</div>
+</footer>
+
+<script>
+// Scroll reveal
+const obs = new IntersectionObserver(els => els.forEach(e => { if(e.isIntersecting) e.target.classList.add('in'); }), {threshold:.08});
+document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+// Typing demo in terminal
+const lines = [
+  'asking VIC: best play tonight?',
+  'scanning props: Ja Morant pts...',
+  'checking arb: BOS vs MIL game 4',
+  'sharp money: NHL tonight summary',
+  'CLV check: last 10 bets...',
+];
+let li=0, ci=0;
+const tc = document.getElementById('tc');
+function type() {
+  if(!tc) return;
+  const line = lines[li % lines.length];
+  if(ci <= line.length) {
+    tc.innerHTML = `<span style="color:var(--gd)">&gt; ${line.slice(0,ci)}</span><span class="cur"></span>`;
+    ci++;
+    setTimeout(type, 55);
+  } else {
+    setTimeout(() => { ci=0; li++; type(); }, 2200);
+  }
+}
+setTimeout(type, 2500);
+</script>
+</body>
+</html>
