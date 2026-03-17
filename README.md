@@ -1,81 +1,101 @@
 # VIC — Vegas Intelligence Console
 
-## Cross-Platform USB Drive App
+Sharp betting intelligence terminal. Runs locally from USB or any folder.
+Data (bets, API keys, logs) never leaves your machine.
 
-VIC runs on both Windows and Linux from the same USB drive.
-Your bets, API keys, and all data are stored in the data/
-folder on the USB — shared automatically between both OSes.
+---
 
-─────────────────────────────────────────────────────────────
+## QUICK START
 
-## WINDOWS
+### Windows
+```
+Right-click start.ps1 → Run with PowerShell
+```
+or double-click `start.bat`
 
-  PowerShell (recommended):
-    Right-click start.ps1 -> Run with PowerShell
-    Or in PowerShell:  .\start.ps1
+### Linux / Mac
+```bash
+bash start.sh
+```
 
-  Command Prompt:
-    Double-click start.bat
-    Or in CMD:  start.bat
+Then open **http://localhost:3747** (browser auto-opens after 2s).
 
-  NOTE: If PowerShell blocks .ps1 scripts, run this once:
-    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+> **First run:** dependencies install to `~/.vic_modules/` (~30 seconds).
+> Every run after is instant.
 
-  First run: dependencies install to C:\Users\YOU\.vic_modules\
-  (USB drives block npm on FAT32/exFAT -- installs to home drive)
-  Takes ~30 seconds. Subsequent runs start instantly.
+---
 
-## LINUX / MAC
+## UPDATE FROM GITHUB
 
-  In terminal:    bash start.sh
+### Windows — double-click `update.bat`
 
-  IMPORTANT: Use "bash start.sh" — NOT "./start.sh"
-  USB drives are mounted noexec on Linux, which blocks direct
-  script execution.
+### Linux / Mac
+```bash
+bash update.sh
+```
 
-  First run installs dependencies to ~/.vic_modules/ on your
-  home drive (USB drives are FAT32/exFAT which can't store
-  npm's symlinks). This takes ~30 seconds once.
+This pulls the latest code from GitHub while keeping your personal data
+(`data/` folder — bets, API keys, logs) untouched.
 
-  If the install step inside start.sh fails, run separately:
-    bash install.sh
+---
 
-─────────────────────────────────────────────────────────────
+## SETUP
 
-## HOW THE DATA SHARING WORKS
+1. Start VIC
+2. Go to **Settings** (⚙ in top-right)
+3. Add your API keys:
+   - **The Odds API** — [the-odds-api.com](https://the-odds-api.com) (500 free req/month)
+   - **Claude API** — [console.anthropic.com](https://console.anthropic.com) (pay-as-you-go)
+4. ESPN, SAO scraper, Open-Meteo weather — **free, no key needed**
 
-  USB Drive (travels with you):
-    data/config.json    ← API keys, settings
-    data/bets.json      ← All bets
-    data/clv.json       ← CLV tracking
-    data/parlays.json   ← Saved parlays
-    data/alerts.json    ← Line alert watchlist
-    data/logs.json      ← System logs
+---
 
-  Linux home drive (stays on that machine):
-    ~/.vic_modules/     ← node_modules (Linux only)
+## PAGES
 
-  Windows USB:
-    node_modules/       ← node_modules (Windows, on USB)
+| Page | Description |
+|------|-------------|
+| **Home** | Dashboard — games, news, Ask VIC chatbot, recent bets |
+| **Legs** | AI edge model — pulls live odds + injuries + public % |
+| **Odds** | Live odds from Hard Rock Bet, FanDuel, DraftKings, BetMGM |
+| **Scores** | Live scores from ESPN |
+| **Props** | Player props with multi-book comparison |
+| **Public %** | SAO consensus — ticket %, money %, fade/steam/RLM signals |
+| **Alerts** | Line movement monitor — auto-scans every 5 minutes |
+| **Intel Feed** | ESPN news, scores, standings, leaders, AI digest |
+| **Injuries** | ESPN per-team injury report with AI impact analysis |
+| **AI Analysis** | Claude Sonnet + web search — deep game/slate analysis |
+| **Weather** | Open-Meteo stadium weather for NFL/MLB outdoor venues |
+| **Stats** | ESPN league leaders + standings |
+| **Bet Tracker** | Log bets, set results, P/L tracking |
+| **CLV** | Closing line value — sharpness indicator |
+| **Bankroll** | P/L chart, monthly breakdown, AI performance review |
+| **Parlay** | AI parlay finder + manual builder |
+| **Tools** | 11 tools: EV, Kelly, odds converter, hedge, arb, sharp money tracker, prop trends, AI scout + more |
+| **Logs** | System event log with toggle, filters, export |
+| **Settings** | API keys, preferences, system tests |
 
-  Because data/ is always read from __dirname (the USB),
-  switching between Windows and Linux is seamless — plug in,
-  run, your bets and settings are right there.
+---
 
-─────────────────────────────────────────────────────────────
+## TECH STACK
 
-## OPEN IN BROWSER
+- **Backend:** Node.js + Express on `localhost:3747`
+- **Frontend:** Plain HTML + CSS + vanilla JS (no framework)
+- **Data sources:** The Odds API, ESPN public JSON, SAO scraper, Open-Meteo, Claude API
+- **Storage:** JSON files in `data/` folder
 
-  http://localhost:3747
+---
 
-## STOP VIC
+## DATA & PRIVACY
 
-  Press Ctrl+C in the terminal / command prompt window.
+- All data stored locally in `data/` on your USB/drive
+- API keys stored in `data/config.json` — never sent anywhere except the official API endpoints
+- `data/` is in `.gitignore` — never committed to GitHub
 
-─────────────────────────────────────────────────────────────
+---
 
-## DEFAULT SPORTSBOOK
+## REPO
 
-  Hard Rock Bet is the default book throughout VIC.
-  Change in: Settings → Model Parameters → Default Book
+```
+github.com/YOUR_USERNAME/vic
+```
 
