@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VIC — Dashboard</title>
 <link rel="stylesheet" href="vic.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="icon" href="vic_icon.jpeg">
 <style>
 /* ── Terminal font override for dashboard only ── */
@@ -554,11 +555,19 @@
       </div>
 
       <!-- ── TAB: BETS ── -->
-      <div class="term-panel" id="panel-bets">
-        <div class="tp-header">
-          <span class="tp-label">// Bet History</span>
-          <a href="tracker.html" class="tp-link">full tracker →</a>
+      <div class="term-panel" id="panel-bets" style="display:flex;flex-direction:column;">
+        <div class="tp-header" style="flex-shrink:0;">
+          <span class="tp-label">// Bankroll</span>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span id="bets-wr" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;"></span>
+            <a href="tracker.html" class="tp-link">full tracker →</a>
+          </div>
         </div>
+        <!-- Mini P&L chart -->
+        <div style="height:100px;padding:6px 10px;flex-shrink:0;background:#050b05;border-bottom:1px solid #0f2010;">
+          <canvas id="mini-pl-chart" style="width:100%;height:88px;"></canvas>
+        </div>
+        <!-- Bet list -->
         <div id="bets-out-full" style="flex:1;overflow-y:auto;">
           <div class="tl"><span class="tm">no bets logged yet</span></div>
         </div>
@@ -696,10 +705,28 @@ let gamesFilter = 'all';
 let gamesFilter2 = 'all';
 
 // ── Init ──────────────────────────────────────────────
+let _liveRefreshTimer = null;
+
 async function init() {
   checkServerStatus();
   addLog('inf', 'VIC initialising...');
   await Promise.all([loadStats(), checkStatus(), loadGames(), loadNews()]);
+  startLiveRefresh();
+}
+
+function startLiveRefresh() {
+  clearInterval(_liveRefreshTimer);
+  _liveRefreshTimer = setInterval(async () => {
+    // Only refresh if there are live games (started, not completed)
+    const hasLive = allGames.some(g => {
+      const start = new Date(g.commence_time || g.date).getTime();
+      return start <= Date.now() && !g.completed;
+    });
+    if (hasLive) {
+      await loadGames();
+      addLog('ok', 'live scores refreshed');
+    }
+  }, 60 * 1000); // every 60 seconds
 }
 
 async function refreshAll() {
@@ -872,6 +899,7 @@ async function loadGames() {
     document.getElementById('k-sports').textContent = `${sports.length} sport${sports.length !== 1 ? 's' : ''}`;
     addLog('ok', `${ct} games loaded across ${sports.length} sports`);
     renderBetGames();
+    checkAutoSettle();
   } catch(e) {
     addLog('warn', `proxy offline or no games — trying ESPN directly`);
     // Fallback: hit ESPN scoreboard directly
@@ -982,6 +1010,57 @@ function gameLines(games, limit) {
 }
 
 // Render ONLY games the user has an active bet on
+async function checkAutoSettle() {
+  // Check if any pending bets are in completed games — prompt for result entry
+  try {
+    const bets   = await getBets();
+    const pending = bets.filter(b => b.result === 'pending');
+    if (!pending.length) return;
+
+    const settled = [];
+    for (const game of allGames) {
+      if (!game.completed) continue;
+      for (const bet of pending) {
+        const betLow   = (bet.bet || '').toLowerCase();
+        const allWords = [...(game.away_team||'').toLowerCase().split(' '),
+                         ...(game.home_team||'').toLowerCase().split(' ')];
+        const matched  = allWords.some(w => w.length > 3 && betLow.includes(w));
+        if (matched) settled.push({ bet, game });
+      }
+    }
+
+    if (settled.length) {
+      // Show settle banner at top of recent bets
+      const el = document.getElementById('recent-bets-out');
+      if (!el) return;
+      const banner = `<div style="background:#0a1800;border:1px solid #00ff41;border-radius:2px;padding:7px 10px;margin-bottom:6px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#00ff41;letter-spacing:1.5px;margin-bottom:5px;">⚡ ${settled.length} BET${settled.length>1?'S':''} READY TO SETTLE</div>
+        ${settled.map(({bet, game}) => `
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#00cc33;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${bet.bet?.slice(0,30)}</span>
+            <button onclick="quickSettle(${bet.id},'win')" style="font-family:'JetBrains Mono',monospace;font-size:9px;background:#003300;border:1px solid #00aa22;color:#00ff41;padding:2px 7px;cursor:pointer;border-radius:2px;">W</button>
+            <button onclick="quickSettle(${bet.id},'loss')" style="font-family:'JetBrains Mono',monospace;font-size:9px;background:#1a0000;border:1px solid #aa2222;color:#cc3333;padding:2px 7px;cursor:pointer;border-radius:2px;">L</button>
+            <button onclick="quickSettle(${bet.id},'push')" style="font-family:'JetBrains Mono',monospace;font-size:9px;background:#0a0800;border:1px solid #554400;color:#aa9900;padding:2px 7px;cursor:pointer;border-radius:2px;">P</button>
+          </div>`).join('')}
+      </div>`;
+      el.insertAdjacentHTML('afterbegin', banner);
+    }
+  } catch(e) {}
+}
+
+async function quickSettle(betId, result) {
+  try {
+    const bets = await getBets();
+    const bet  = bets.find(b => b.id === betId);
+    if (!bet) return;
+    await updateBet(betId, { result, profit: calcProfit(bet.odds, bet.units || 1, result) });
+    addLog('ok', `Settled: ${bet.bet?.slice(0,25)} → ${result.toUpperCase()}`);
+    await loadStats();
+    renderRecentBets();
+    checkAutoSettle();
+  } catch(e) { addLog('error', 'Settle failed: ' + e.message); }
+}
+
 async function renderBetGames() {
   const el = document.getElementById('games-out');
   try {
@@ -1060,11 +1139,23 @@ async function renderBetGames() {
         ? `<span style="color:#00ff41;font-size:9px;letter-spacing:1px;flex-shrink:0;">● ${myBets.length}BET</span>`
         : '';
 
-      return `<div class="tl">
+      // Live score display
+      const awayScore = g.awayScore || (g.scores?.find(s => s.name === g.away_team)?.score) || '';
+      const homeScore = g.homeScore || (g.scores?.find(s => s.name === g.home_team)?.score) || '';
+      const hasScore  = awayScore !== '' && homeScore !== '';
+      const scoreTag  = hasScore
+        ? `<span style="color:#00ff41;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;flex-shrink:0;">${awayScore}–${homeScore}</span>`
+        : (line ? `<span class="ty" style="flex-shrink:0;">${line}</span>` : '');
+      const statusTag = g.completed
+        ? `<span style="color:#1e4a1e;font-size:9px;flex-shrink:0;">FINAL</span>`
+        : '';
+
+      return `<div class="tl" style="padding:4px 0;border-bottom:1px solid #060c06;">
         ${time}
-        <span class="tb" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${away} @ ${home}</span>
-        ${line ? `<span class="ty" style="flex-shrink:0;">${line}</span>` : ''}
-        ${tot  ? `<span class="ta" style="flex-shrink:0;">${tot}</span>`  : ''}
+        <span class="tb" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${away} @ ${home}</span>
+        ${scoreTag}
+        ${statusTag}
+        ${!hasScore && tot ? `<span class="ta" style="flex-shrink:0;">${tot}</span>` : ''}
         ${betTag}
       </div>`;
     }).join('');
@@ -1259,28 +1350,87 @@ function renderNewsFullTab() {
 }
 
 // ── Bets full tab ─────────────────────────────────────
+let _miniChart = null;
+
 async function renderBetsFullTab() {
   try {
     const bets = await getBets();
     if (!bets.length) {
-      document.getElementById('bets-out-full').innerHTML = `<div class="tl"><span class="tm">no bets logged yet</span></div>`;
+      document.getElementById('bets-out-full').innerHTML =
+        `<div class="tl"><span class="tm">no bets logged yet — log one from Legs or Tracker</span></div>`;
       return;
     }
+
+    // Build mini P&L chart
+    const settled = bets.filter(b => b.result !== 'pending');
+    let cum = 0;
+    const chartData = settled.map(b => { cum += (b.profit || 0); return parseFloat(cum.toFixed(2)); });
+    const labels    = settled.map((_, i) => i + 1);
+    const lineColor = cum >= 0 ? '#00ff41' : '#cc3333';
+
+    const canvas = document.getElementById('mini-pl-chart');
+    if (canvas && typeof Chart !== 'undefined') {
+      if (_miniChart) { _miniChart.destroy(); _miniChart = null; }
+      _miniChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data: chartData,
+            borderColor: lineColor,
+            backgroundColor: lineColor + '18',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.4,
+            fill: true,
+          }]
+        },
+        options: {
+          responsive: false,
+          animation: false,
+          plugins: { legend: { display: false }, tooltip: {
+            callbacks: { label: ctx => (ctx.raw >= 0 ? '+' : '') + ctx.raw + 'u' }
+          }},
+          scales: {
+            x: { display: false },
+            y: { display: true,
+              ticks: { color: '#1e4a1e', font: { family: 'JetBrains Mono', size: 9 },
+                callback: v => (v >= 0 ? '+' : '') + v + 'u', maxTicksLimit: 4 },
+              grid: { color: '#0a180a' }, border: { color: '#0a180a' }
+            }
+          }
+        }
+      });
+    }
+
+    // Stats row
+    const wins  = settled.filter(b => b.result === 'win').length;
+    const total = settled.length;
+    const wr    = total ? (wins / total * 100).toFixed(0) + '%' : '—';
+    const plStr = (cum >= 0 ? '+' : '') + cum.toFixed(1) + 'u';
+    document.getElementById('bets-wr').textContent =
+      `${plStr}  ${wr} WR  ${bets.filter(b=>b.result==='pending').length} pending`;
+    document.getElementById('bets-wr').style.color = cum >= 0 ? '#00ff41' : '#cc3333';
+
+    // Bet list
     document.getElementById('bets-out-full').innerHTML = bets.slice().reverse().map(b => {
       const plColor = (b.profit || 0) >= 0 ? '#00cc33' : '#cc3333';
-      const plTxt   = b.profit ? `${b.profit >= 0 ? '+' : ''}${b.profit.toFixed(1)}u` : '—';
+      const plTxt   = b.result === 'pending'
+        ? `<span style="color:#2a6a2a;">${b.units||1}u</span>`
+        : `<span style="color:${plColor};">${b.profit >= 0 ? '+' : ''}${(b.profit||0).toFixed(1)}u</span>`;
       const resCol  = b.result === 'win' ? '#00cc33' : b.result === 'loss' ? '#cc3333' : '#aacc00';
       const date    = b.date || '';
-      return `<div class="tl">
-        <span class="td" style="min-width:55px;">${date.slice(5,10) || '--'}</span>
-        <span class="tb" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.bet}</span>
-        <span class="td" style="min-width:40px;">${b.sport || ''}</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${plColor};min-width:50px;">${plTxt}</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${resCol};">${b.result.toUpperCase()}</span>
+      return `<div class="tl" style="padding:3px 0;">
+        <span class="td" style="min-width:52px;">${date.slice(5,10) || '--'}</span>
+        <span class="tb" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${b.bet}">${b.bet}</span>
+        <span class="td" style="min-width:36px;">${b.sport || ''}</span>
+        ${plTxt}
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${resCol};min-width:50px;text-align:right;">${(b.result||'PEND').toUpperCase()}</span>
       </div>`;
     }).join('');
   } catch(e) {
-    document.getElementById('bets-out-full').innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+    document.getElementById('bets-out-full').innerHTML =
+      `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
   }
 }
 
