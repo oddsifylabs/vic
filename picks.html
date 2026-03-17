@@ -24,6 +24,24 @@
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;display:flex;align-items:center;justify-content:center;}
 .modal-box{background:#050b05;border:1px solid #00ff41;width:700px;max-width:95vw;max-height:90vh;overflow-y:auto;border-radius:2px;}
 .bet-modal-row{display:grid;grid-template-columns:1fr 90px 80px 150px 90px 28px;gap:5px;align-items:end;padding:7px 10px;background:#080e08;border:1px solid #0a1a0a;border-radius:2px;margin-bottom:5px;}
+
+<style>
+@keyframes fadeInStep {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+/* Make the legs-out scroll smoothly */
+#legs-out { scroll-behavior: smooth; }
+/* Progress log lines get a left accent */
+#legs-out .tl {
+  border-left: 2px solid transparent;
+  padding-left: 4px;
+  transition: border-color .2s;
+}
+#legs-out .tl:last-child {
+  border-left-color: #00ff41;
+}
+</style>
 </style>
 </head>
 <body>
@@ -160,49 +178,185 @@ const sportMap={all:[['basketball_nba','NBA'],['americanfootball_nfl','NFL'],['b
 let currentLegs=[],scanHistory=JSON.parse(localStorage.getItem('vic_scans')||'[]');
 renderScanHistory();
 
+// ── Live progress log shown during model run ─────────────────────────────
+function logStep(msg, cls='') {
+  const el = document.getElementById('legs-out');
+  const div = document.createElement('div');
+  div.className = 'tl';
+  div.style.animation = 'fadeInStep .25s ease forwards';
+  const color = cls==='ok'?'#2a8a2a':cls==='hit'?'#aacc00':cls==='err'?'#cc3333':'#009955';
+  div.innerHTML = `<span class="td" style="min-width:44px;">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${color};">${msg}</span>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearLegsLog() {
+  const el = document.getElementById('legs-out');
+  el.innerHTML = '';
+}
+
 async function runModel(){
-  const btn=document.getElementById('run-btn');btn.disabled=true;btn.textContent='RUNNING...';
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = 'RUNNING...';
   document.getElementById('page-kpi')?.querySelectorAll('.tkv').forEach(v=>v.textContent='...');
-  const sports=sportMap[document.getElementById('sports-select').value]||sportMap.all;
-  const minScore=document.getElementById('min-score').value;
-  const maxUnits=document.getElementById('max-units').value;
-  const typeStr={all:'All bet types.',props:'Player props only.',games:'Game bets only.'}[document.getElementById('types-select').value]||'All.';
-  setLegsStatus('fetching live odds...');
-  let oddsCtx='';
-  for(const[key,name]of sports){
-    try{
-      const data=await proxyOdds(`sports/${key}/odds/`,{regions:'us,us2',markets:'h2h,spreads,totals',oddsFormat:'american',bookmakers:'hardrockbet,fanduel,draftkings,betmgm'});
-      if(Array.isArray(data)&&data.length){
-        oddsCtx+=`\n=== ${name} ===\n`;
-        data.slice(0,8).forEach(g=>{
-          oddsCtx+=`${g.away_team} @ ${g.home_team} | ${new Date(g.commence_time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}\n`;
-          g.bookmakers?.forEach(b=>{
-            const sp=b.markets?.find(m=>m.key==='spreads');const tot=b.markets?.find(m=>m.key==='totals');const ml=b.markets?.find(m=>m.key==='h2h');
-            oddsCtx+=`  [${b.key}] ${sp?.outcomes?.map(o=>`${o.name} ${o.point>0?'+':''}${o.point}(${fmtOdds(o.price)})`).join('/')||''} | ${tot?.outcomes?.map(o=>`${o.name}${o.point}(${fmtOdds(o.price)})`).join('/')||''} | ${ml?.outcomes?.map(o=>`${o.name}(${fmtOdds(o.price)})`).join('/')||''}\n`;
-          });
-        });
-      }
-    }catch(e){}
+
+  const sports   = sportMap[document.getElementById('sports-select').value] || sportMap.all;
+  const minScore = document.getElementById('min-score').value;
+  const maxUnits = document.getElementById('max-units').value;
+  const typeStr  = {all:'All bet types.',props:'Player props only.',games:'Game bets only.'}[document.getElementById('types-select').value]||'All.';
+
+  clearLegsLog();
+  logStep(`edge model starting · ${sports.map(s=>s[1]).join(' + ')} · ${new Date().toLocaleTimeString()}`);
+  logStep(`fetching live odds from 4 books in parallel...`);
+
+  // ── STEP 1: Fetch all odds in PARALLEL (not sequential) ──────────────
+  const t0 = Date.now();
+  const oddsResults = await Promise.allSettled(
+    sports.map(([key, name]) =>
+      proxyOdds(`sports/${key}/odds/`, {
+        regions:'us,us2', markets:'h2h,spreads,totals',
+        oddsFormat:'american', bookmakers:'hardrockbet,fanduel,draftkings,betmgm'
+      }).then(data => ({ key, name, data }))
+    )
+  );
+
+  let oddsCtx = '';
+  let gameCount = 0;
+  for (const res of oddsResults) {
+    if (res.status !== 'fulfilled') continue;
+    const { name, data } = res.value;
+    if (!Array.isArray(data) || !data.length) continue;
+    gameCount += Math.min(data.length, 8);
+    oddsCtx += `
+=== ${name} ===
+`;
+    data.slice(0,8).forEach(g => {
+      oddsCtx += `${g.away_team} @ ${g.home_team} | ${new Date(g.commence_time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+`;
+      g.bookmakers?.forEach(b => {
+        const sp=b.markets?.find(m=>m.key==='spreads');
+        const tot=b.markets?.find(m=>m.key==='totals');
+        const ml=b.markets?.find(m=>m.key==='h2h');
+        oddsCtx += `  [${b.key}] ${sp?.outcomes?.map(o=>`${o.name} ${o.point>0?'+':''}${o.point}(${fmtOdds(o.price)})`).join('/')||''} | ${tot?.outcomes?.map(o=>`${o.name}${o.point}(${fmtOdds(o.price)})`).join('/')||''} | ${ml?.outcomes?.map(o=>`${o.name}(${fmtOdds(o.price)})`).join('/')||''}
+`;
+      });
+    });
+    logStep(`✓ ${name} — ${Math.min(data.length,8)} games loaded`, 'ok');
   }
-  setLegsStatus('loading ESPN injuries + SAO public%...');
-  let liveCtx='';
-  for(const[key,name]of sports){
-    const sh=key.replace('basketball_','').replace('americanfootball_','').replace('baseball_','').replace('icehockey_','').replace('soccer_usa_','').replace('soccer_','');
-    try{const r=await fetch(`${API}/api/espn/injuries/${sh}`);if(r.ok){const d=await r.json();if(d.injuries?.length)liveCtx+=`\n${name} INJURIES:\n${d.text.slice(0,500)}\n`;}}catch(e){}
-    try{const r=await fetch(`${API}/api/sao/consensus/${sh}`);if(r.ok){const d=await r.json();if(d.count>0)liveCtx+=`\n${name} PUBLIC%:\n${d.text.slice(0,300)}\n`;}}catch(e){}
+  if (!oddsCtx) {
+    logStep('⚠ no odds found — check Odds API key in Settings', 'err');
+  } else {
+    logStep(`odds complete in ${((Date.now()-t0)/1000).toFixed(1)}s · ${gameCount} games`, 'ok');
   }
-  setLegsStatus('Claude running edge model...');
-  const prompt=`Elite sharp betting analyst. Run multi-sport edge model.\n${typeStr}\nMin score: ${minScore}/12. Max units: ${maxUnits}.\nDate: ${new Date().toLocaleString()}\n\nLIVE ODDS:\n${oddsCtx||'No odds.'}\n\nLIVE CONTEXT:\n${liveCtx||'No live data.'}\n\nFor EACH leg use EXACTLY:\n---PICK---\nBET: [exact wager]\nSPORT: [NBA/NFL/MLB/NHL/EPL]\nBOOK: [best book]\nLINE: [exact line with odds]\nUNITS: [0.5/1/1.5/2]\nSCORE: [X/12]\nREC: [STRONG BET/LEAN/PASS]\nEDGE: [+X%]\nPROJ: [projection]\nRLM: [YES/NO]\nTHESIS: [2 sentences]\nRISK: [1 sentence]\n---END---\nSUMMARY: X units across N legs | Confidence: High/Medium/Low`;
-  try{
-    const text=await proxyClaude(prompt,2400);
-    currentLegs=parseLegs(text);
-    if(!currentLegs.length){document.getElementById('legs-out').innerHTML=`<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;line-height:1.9;white-space:pre-wrap;padding:12px 0;">${text}</div>`;return;}
-    saveScan(currentLegs,text,sports.map(s=>s[1]).join('+'));
-    renderLegs(currentLegs,text);
-    sbLog(`${currentLegs.length} legs generated`,'ok');
-  }catch(e){document.getElementById('legs-out').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;sbLog(e.message,'err');}
-  btn.disabled=false;btn.textContent='⚡ RUN MODEL';
-  document.getElementById('run-ts').textContent=new Date().toLocaleTimeString();
+
+  // ── STEP 2: Fetch injuries + public % in PARALLEL ────────────────────
+  logStep(`fetching injuries + public % in parallel...`);
+  const t1 = Date.now();
+
+  const contextFetches = sports.flatMap(([key, name]) => {
+    const sh = key.replace('basketball_','').replace('americanfootball_','').replace('baseball_','').replace('icehockey_','').replace('soccer_usa_','').replace('soccer_','');
+    return [
+      fetch(`${API}/api/espn/injuries/${sh}`).then(r=>r.ok?r.json():null).then(d=>({type:'inj',name,d})).catch(()=>null),
+      fetch(`${API}/api/sao/consensus/${sh}`).then(r=>r.ok?r.json():null).then(d=>({type:'pub',name,d})).catch(()=>null),
+    ];
+  });
+
+  const ctxResults = await Promise.allSettled(contextFetches);
+  let liveCtx = '';
+  let injCount=0, pubCount=0;
+
+  for (const res of ctxResults) {
+    if (res.status !== 'fulfilled' || !res.value) continue;
+    const {type, name, d} = res.value;
+    if (!d) continue;
+    if (type==='inj' && d.injuries?.length) {
+      liveCtx += `
+${name} INJURIES:
+${d.text.slice(0,500)}
+`;
+      injCount += d.injuries.length;
+    }
+    if (type==='pub' && d.count>0) {
+      liveCtx += `
+${name} PUBLIC%:
+${d.text.slice(0,300)}
+`;
+      pubCount += d.count;
+    }
+  }
+  logStep(`✓ ${injCount} injuries · ${pubCount} public% lines — ${((Date.now()-t1)/1000).toFixed(1)}s`, 'ok');
+
+  // ── STEP 3: Claude edge model ─────────────────────────────────────────
+  logStep(`sending to Claude Sonnet — analyzing ${gameCount} games...`);
+  logStep(`this takes 15–25s depending on slate size · web search enabled`);
+
+  // Animated "thinking" dots
+  let dotTimer = null;
+  let dotCount = 0;
+  const dotLine = document.createElement('div');
+  dotLine.className = 'tl';
+  dotLine.id = 'dot-line';
+  dotLine.innerHTML = `<span class="td" style="min-width:44px;">VIC&gt;</span><span id="dot-txt" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">computing</span>`;
+  document.getElementById('legs-out').appendChild(dotLine);
+
+  dotTimer = setInterval(() => {
+    dotCount++;
+    const dots = '.'.repeat((dotCount % 4));
+    const elapsed = Math.floor((Date.now() - t1) / 1000);
+    const dotTxt = document.getElementById('dot-txt');
+    if (dotTxt) dotTxt.textContent = `computing${dots} (${elapsed}s)`;
+  }, 400);
+
+  const prompt = `Elite sharp betting analyst. Run multi-sport edge model.
+${typeStr}
+Min score: ${minScore}/12. Max units: ${maxUnits}.
+Date: ${new Date().toLocaleString()}
+
+LIVE ODDS:
+${oddsCtx||'No odds available.'}
+
+LIVE CONTEXT:
+${liveCtx||'No live context.'}
+
+For EACH leg use EXACTLY this format:
+---PICK---
+BET: [exact wager]
+SPORT: [NBA/NFL/MLB/NHL/EPL]
+BOOK: [best book]
+LINE: [exact line with odds]
+UNITS: [0.5/1/1.5/2]
+SCORE: [X/12]
+REC: [STRONG BET/LEAN/PASS]
+EDGE: [+X%]
+PROJ: [projection]
+RLM: [YES/NO]
+THESIS: [2 sentences max]
+RISK: [1 sentence]
+---END---
+SUMMARY: X units across N legs | Confidence: High/Medium/Low`;
+
+  try {
+    const text = await proxyClaude(prompt, 2400);
+    clearInterval(dotTimer);
+    document.getElementById('dot-line')?.remove();
+
+    currentLegs = parseLegs(text);
+    if (!currentLegs.length) {
+      document.getElementById('legs-out').innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;line-height:1.9;white-space:pre-wrap;padding:12px 0;">${text}</div>`;
+      return;
+    }
+    saveScan(currentLegs, text, sports.map(s=>s[1]).join('+'));
+    renderLegs(currentLegs, text);
+    sbLog(`${currentLegs.length} legs generated`, 'ok');
+  } catch(e) {
+    clearInterval(dotTimer);
+    document.getElementById('dot-line')?.remove();
+    logStep(`[ER] ${e.message}`, 'err');
+    sbLog(e.message, 'err');
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ RUN MODEL';
+  document.getElementById('run-ts').textContent = new Date().toLocaleTimeString();
 }
 function setLegsStatus(msg){document.getElementById('legs-out').innerHTML=`<div class="tl"><span class="td">VIC&gt;</span><span class="ta">${msg}</span></div><div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;}
 function parseLegs(text){
