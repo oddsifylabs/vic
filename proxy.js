@@ -1122,25 +1122,31 @@ app.get('/api/scrape/cache/status', (req, res) => {
   res.json({ count: keys.length, entries: status });
 });
 
-// GET /api/sao/test — quick connectivity check
+// GET /api/sao/test — test both Covers (primary) and SAO (fallback)
 app.get('/api/sao/test', async (req, res) => {
-  try {
-    const r = await fetch('https://www.scoresandodds.com/nba', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml'
-      },
-      signal: AbortSignal.timeout(8000)
-    });
-    if (r.ok) {
-      const text = await r.text();
-      const hasData = text.includes('consensus') || text.includes('spread') || text.includes('moneyline');
-      return res.json({ ok: true, status: r.status, hasData, message: 'SAO reachable' });
-    }
-    return res.json({ ok: false, status: r.status, message: `SAO returned ${r.status}` });
-  } catch(e) {
-    return res.json({ ok: false, message: e.message });
-  }
+  const results = await Promise.allSettled([
+    fetch('https://contests.covers.com/consensus/topconsensus/nba/overall', {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' },
+      signal: AbortSignal.timeout(5000)
+    }).then(r => ({ source: 'covers', ok: r.ok, status: r.status })),
+    fetch('https://www.scoresandodds.com/nba', {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' },
+      signal: AbortSignal.timeout(5000)
+    }).then(r => ({ source: 'sao', ok: r.ok, status: r.status })),
+  ]);
+
+  const covers = results[0].status === 'fulfilled' ? results[0].value : { source:'covers', ok:false, message: results[0].reason?.message };
+  const sao    = results[1].status === 'fulfilled' ? results[1].value : { source:'sao',    ok:false, message: results[1].reason?.message };
+
+  const anyOk  = covers.ok || sao.ok;
+  res.json({
+    ok:      anyOk,
+    primary: covers,
+    fallback: sao,
+    message: anyOk
+      ? (covers.ok ? 'Covers.com online (primary)' : 'SAO online (fallback only)')
+      : 'Both Covers and SAO unreachable'
+  });
 });
 
 
@@ -2436,111 +2442,148 @@ app.get('/api/sao/injuries/:sport', async (req, res) => {
 // GET /api/sao/consensus/:sport
 // Parses SAO consensus-picks page — server-side rendered HTML
 // Returns structured games with away/home names + bet%/money% per market
+// ── PUBLIC BETTING CONSENSUS ─────────────────────────────────────────────
+// Primary: Covers.com (fast, clean JSON-like data)
+// Fallback: SAO scrape if Covers fails
+// GET /api/sao/consensus/:sport
 app.get('/api/sao/consensus/:sport', async (req, res) => {
-  const sport = req.params.sport.toLowerCase();
-  const slug  = SAO_SPORTS[sport];
-  if (!slug) return res.json({ sport, count:0, games:[], error:'Sport not supported' });
+  const sport    = req.params.sport.toLowerCase();
+  const cacheKey = `consensus_${sport}`;
+  const cached   = getCached(cacheKey, 5 * 60 * 1000); // 5 min cache
+  if (cached) {
+    addLog('info','Consensus',`${sport.toUpperCase()} (cache)`,`${cached.count} games`);
+    return res.json(cached);
+  }
 
-  const cacheKey = `sao_cons_${sport}`;
-  const cached   = getCached(cacheKey, 4 * 60 * 1000); // 4 min
-  if (cached) { addLog('info','SAO',`Consensus ${sport.toUpperCase()} (cache)`,`${cached.count} games`); return res.json(cached); }
+  // ── PRIMARY: Covers.com consensus (fast + reliable) ───────────────────
+  const COVERS_SPORTS = {
+    nba:'nba', nfl:'nfl', mlb:'mlb', nhl:'nhl',
+    ncaab:'ncaab', ncaaf:'ncaaf', wnba:'wnba'
+  };
+  const coversSlug = COVERS_SPORTS[sport];
 
-  const url = `https://www.scoresandodds.com/${slug}/consensus-picks`;
+  if (coversSlug) {
+    try {
+      const ctrl = new AbortController();
+      const tmt  = setTimeout(() => ctrl.abort(), 6000); // 6s timeout
+      const url  = `https://contests.covers.com/consensus/topconsensus/${coversSlug}/overall`;
+      const r    = await fetch(url, {
+        headers: {
+          ...SCRAPE_HEADERS,
+          'Referer': 'https://covers.com/',
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+        signal: ctrl.signal
+      });
+      clearTimeout(tmt);
+
+      if (r.ok) {
+        const html = await r.text();
+        const $    = cheerio.load(html);
+        const games = [];
+
+        // Covers consensus table: each row has team name, bet%, money%
+        // Structure: .consensus-picks-table or table rows with team data
+        // They use a table format: Home | Away | Spread% | Total% | ML%
+        $('table tr, .consensus-picks-table tr').each((_, row) => {
+          const cells = $(row).find('td');
+          if (cells.length < 3) return;
+          
+          const c0 = $(cells[0]).text().trim();
+          const c1 = $(cells[1]).text().trim();
+          const c2 = $(cells[2]).text().trim();
+          const c3 = cells.length > 3 ? $(cells[3]).text().trim() : '';
+
+          // Look for percentage patterns
+          const pct0 = c0.match(/(\d{1,3})%/);
+          const pct2 = c2.match(/(\d{1,3})%/);
+          if (pct0 && pct2) {
+            games.push({
+              away: c1 || '?', home: c3 || '?',
+              awayBetPct: parseInt(pct0[1]),
+              homeBetPct: parseInt(pct2[1]),
+              awayMoneyPct: null, homeMoneyPct: null,
+              signal: parseInt(pct0[1]) >= 75 || parseInt(pct2[1]) >= 75 ? 'steam' : 'none',
+              hasRLM: false, sport, source: 'covers'
+            });
+          }
+        });
+
+        // If table parse didn't work, try text-based parsing
+        if (!games.length) {
+          const text = $('body').text();
+          // Covers shows: "TEAM1 XX% / TEAM2 XX%" patterns
+          const gameMatches = text.matchAll(/([A-Za-z\s]{3,25})\s+(\d{1,3})%\s*[\/\|]\s*([A-Za-z\s]{3,25})\s+(\d{1,3})%/g);
+          for (const m of gameMatches) {
+            const away = m[1].trim(), awayPct = parseInt(m[2]);
+            const home = m[3].trim(), homePct = parseInt(m[4]);
+            if (awayPct + homePct >= 95 && awayPct + homePct <= 105) {
+              games.push({
+                away, home, awayBetPct: awayPct, homeBetPct: homePct,
+                awayMoneyPct: null, homeMoneyPct: null,
+                signal: Math.max(awayPct, homePct) >= 75 ? 'steam' : 'none',
+                hasRLM: false, sport, source: 'covers'
+              });
+            }
+          }
+        }
+
+        if (games.length) {
+          const textSummary = games.map(g =>
+            `${g.away} vs ${g.home} | Bets: ${g.away} ${g.awayBetPct}% / ${g.home} ${g.homeBetPct}% | Signal: ${g.signal.toUpperCase()}`
+          ).join('\n');
+          const result = { sport, count:games.length, games, text:textSummary, source:'covers', scrapedAt:new Date().toISOString() };
+          setCache(cacheKey, result);
+          addLog('info','Covers',`Consensus ${sport.toUpperCase()}`,`${games.length} games`);
+          return res.json(result);
+        }
+        addLog('warn','Covers',`Consensus ${sport.toUpperCase()} — parsed 0 games, trying SAO`,'');
+      }
+    } catch(e) {
+      addLog('warn','Covers',`Consensus ${sport.toUpperCase()} failed — trying SAO`,e.message);
+    }
+  }
+
+  // ── FALLBACK: SAO consensus ───────────────────────────────────────────
+  const SAO_SLUG = { nba:'nba', nfl:'nfl', mlb:'mlb', nhl:'nhl', ncaab:'ncaab', ncaaf:'ncaaf', wnba:'wnba' }[sport];
+  if (!SAO_SLUG) return res.json({ sport, count:0, games:[], text:'', error:'Sport not supported' });
+
+  const saoUrl = `https://www.scoresandodds.com/${SAO_SLUG}/consensus-picks`;
   try {
-    const r = await fetch(url, { headers: SCRAPE_HEADERS });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const html = await r.text();
-    const $    = cheerio.load(html);
+    const ctrl2 = new AbortController();
+    const tmt2  = setTimeout(() => ctrl2.abort(), 5000); // 5s max
+    const r2    = await fetch(saoUrl, { headers: SCRAPE_HEADERS, signal: ctrl2.signal });
+    clearTimeout(tmt2);
+    if (!r2.ok) throw new Error(`SAO HTTP ${r2.status}`);
+    const html2 = await r2.text();
+    const $2    = cheerio.load(html2);
+    const games2 = [];
 
-    // SAO consensus page structure:
-    // Each game block contains team names from img alt or link text
-    // and percentage splits in list items: "ABBR X%  ABBR" and "Y% Z% % of Money"
-    const games = [];
-
-    // Find all game sections — each game has two team logo+name combos and percentage rows
-    // The page uses a repeating pattern: team imgs, then li items with the % data
-    // We parse the raw text which has: "ABBR % of Bets ABBR  X%  Y%  Z% W%  % of Money"
-    const bodyText = $('body').text();
-
-    // Extract team pair + percentages using the known pattern from SAO list items
-    const gameBlocks = [];
-
-    $('li').each((_, el) => {
-      const text = $(el).text().replace(/\s+/g,' ').trim();
-      // Bet pct pattern: abbr, of Bets, abbr, 4 numbers
+    $2('li').each((_, el) => {
+      const text = $2(el).text().replace(/\s+/g,' ').trim();
       const betMatch = text.match(/(\w+)(?:\s*\([^)]*\))?\s*%\s*of\s*Bets\s*(\w+)(?:\s*\([^)]*\))?\s*(\d{1,3})%\s*(\d{1,3})%\s*(\d{1,3})%\s*(\d{1,3})%\s*%\s*of\s*Money/i);
       if (betMatch) {
-        gameBlocks.push({
-          away: betMatch[1], home: betMatch[2],
-          awayBetPct: parseInt(betMatch[3]), homeBetPct: parseInt(betMatch[4]),
-          awayMoneyPct: parseInt(betMatch[5]), homeMoneyPct: parseInt(betMatch[6]),
-          rawText: text.slice(0,200)
-        });
-        return;
-      }
-      // Partial pattern: only bet% present (no money%)
-      const partMatch = text.match(/(\w+)(?:\s*\([^)]*\))?\s*%\s*of\s*Bets\s*(\w+)(?:\s*\([^)]*\))?\s*(\d{1,3})%\s*(\d{1,3})%/i);
-      if (partMatch) {
-        gameBlocks.push({
-          away: partMatch[1], home: partMatch[2],
-          awayBetPct: parseInt(partMatch[3]), homeBetPct: parseInt(partMatch[4]),
-          awayMoneyPct: null, homeMoneyPct: null,
-          rawText: text.slice(0,200)
+        games2.push({
+          away:betMatch[1], home:betMatch[2],
+          awayBetPct:parseInt(betMatch[3]), homeBetPct:parseInt(betMatch[4]),
+          awayMoneyPct:parseInt(betMatch[5]), homeMoneyPct:parseInt(betMatch[6]),
+          sport, source:'sao'
         });
       }
     });
 
-    // Deduplicate and group by game pair (away+home) — SAO shows spread/total/ML separately
-    const gameMap = {};
-    gameBlocks.forEach(b => {
-      const key = `${b.away}_${b.home}`;
-      if (!gameMap[key]) {
-        gameMap[key] = { away:b.away, home:b.home, markets:[], rawText: b.rawText, sport };
-      }
-      gameMap[key].markets.push({
-        awayBetPct: b.awayBetPct, homeBetPct: b.homeBetPct,
-        awayMoneyPct: b.awayMoneyPct, homeMoneyPct: b.homeMoneyPct,
-      });
-    });
-
-    // Convert to array, use first market as primary bet%
-    const gamesArr = Object.values(gameMap).map(g => {
-      const primary = g.markets[0] || {};
-      // Find RLM: bet% favors one side, money% favors other
-      const betFav   = primary.awayBetPct > primary.homeBetPct ? 'away' : 'home';
-      const moneyFav = primary.awayMoneyPct && primary.awayMoneyPct > primary.homeMoneyPct ? 'away' : 'home';
-      const hasRLM   = primary.awayMoneyPct && betFav !== moneyFav && Math.max(primary.awayBetPct, primary.homeBetPct) >= 60;
-      const maxBet   = Math.max(primary.awayBetPct||0, primary.homeBetPct||0);
-      const signal   = hasRLM ? 'rlm' : maxBet >= 80 ? 'steam' : maxBet >= 65 ? 'fade' : 'none';
-
-      return {
-        ...g,
-        awayBetPct:   primary.awayBetPct,
-        homeBetPct:   primary.homeBetPct,
-        awayMoneyPct: primary.awayMoneyPct,
-        homeMoneyPct: primary.homeMoneyPct,
-        signal, hasRLM, maxBet,
-        allMarkets: g.markets
-      };
-    });
-
-    // Build text summary
-    const text = gamesArr.map(g =>
-      `${g.away} vs ${g.home} | Bets: ${g.away} ${g.awayBetPct}% / ${g.home} ${g.homeBetPct}%` +
-      (g.awayMoneyPct ? ` | Money: ${g.away} ${g.awayMoneyPct}% / ${g.home} ${g.homeMoneyPct}%` : '') +
-      ` | Signal: ${g.signal.toUpperCase()}`
+    const textSum = games2.map(g =>
+      `${g.away} vs ${g.home} | Bets: ${g.awayBetPct}% / ${g.homeBetPct}% | Money: ${g.awayMoneyPct}% / ${g.homeMoneyPct}%`
     ).join('\n');
-
-    const result = { sport, count:gamesArr.length, games:gamesArr, text, url, scrapedAt:new Date().toISOString() };
-    if (gamesArr.length) setCache(cacheKey, result);
-    addLog('info','SAO',`Consensus ${sport.toUpperCase()}`,`${gamesArr.length} games parsed`);
-    res.json(result);
+    const result2 = { sport, count:games2.length, games:games2, text:textSum, source:'sao', scrapedAt:new Date().toISOString() };
+    if (games2.length) setCache(cacheKey, result2);
+    addLog('info','SAO',`Consensus ${sport.toUpperCase()} (fallback)`,`${games2.length} games`);
+    res.json(result2);
   } catch(e) {
-    addLog('error','SAO',`Consensus ${sport.toUpperCase()} FAILED`,e.message);
-    res.json({ sport, count:0, games:[], text:'', error:e.message, url, scrapedAt:new Date().toISOString() });
+    addLog('error','Consensus',`Both Covers and SAO failed for ${sport}`,e.message);
+    res.json({ sport, count:0, games:[], text:'', error:e.message, scrapedAt:new Date().toISOString() });
   }
 });
-
 
 // ── LINE MOVEMENTS ─────────────────────────────────────
 // GET /api/sao/line-movement/:sport
