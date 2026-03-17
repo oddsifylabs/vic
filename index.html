@@ -644,56 +644,71 @@ function renderRecentBets(bets) {
 
 // ── Status check ─────────────────────────────────────────────────────────
 async function checkStatus() {
-  try {
-    const r = await fetch(`${API}/api/config`);
-    if (r.ok) {
-      setStatus('proxy','ok','UP');
-      addLog('ok','proxy online');
-      document.getElementById('sb-dot').style.background = '#00ff41';
-      document.getElementById('offline-banner').style.display = 'none';
-      const cfg = await getConfig();
-      setStatus('odds',  cfg.oddsKey  ?'ok':'error', cfg.oddsKey  ?'OK':'NO KEY');
-      setStatus('claude',cfg.claudeKey?'ok':'error', cfg.claudeKey?'OK':'NO KEY');
-      if (!cfg.oddsKey)   addLog('error','odds API key missing — add in Settings');
-      if (!cfg.claudeKey) addLog('warn', 'Claude key missing — add in Settings');
-    } else { setStatus('proxy','error','ERR'); }
-  } catch(e) {
+  // Fire all status checks in parallel — never await one before starting the next
+  const [proxyRes, espnRes, saoRes, injRes] = await Promise.allSettled([
+    fetch(`${API}/api/config`),
+    fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard'),
+    fetch(`${API}/api/sao/test`).then(r=>r.json()).catch(()=>null),
+    fetch(`${API}/api/espn/injuries/nba`).then(r=>r.json()).catch(()=>null),
+  ]);
+
+  // Proxy + keys
+  if (proxyRes.status === 'fulfilled' && proxyRes.value.ok) {
+    setStatus('proxy','ok','UP');
+    addLog('ok','proxy online');
+    document.getElementById('sb-dot').style.background = '#00ff41';
+    document.getElementById('offline-banner').style.display = 'none';
+    try {
+      const cfg = await proxyRes.value.clone().json().catch(() => getConfig());
+      const c2  = await getConfig();
+      setStatus('odds',  c2.oddsKey  ?'ok':'error', c2.oddsKey  ?'OK':'NO KEY');
+      setStatus('claude',c2.claudeKey?'ok':'error', c2.claudeKey?'OK':'NO KEY');
+      if (!c2.oddsKey)   addLog('error','odds API key missing — add in Settings');
+      if (!c2.claudeKey) addLog('warn', 'Claude key missing — add in Settings');
+    } catch(e) {}
+  } else {
     setStatus('proxy','error','DOWN');
     addLog('error','proxy offline — run start.ps1');
     document.getElementById('sb-dot').style.background = '#cc2222';
     document.getElementById('offline-banner').style.display = 'block';
   }
-  try {
-    const r = await fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
-    setStatus('espn',r.ok?'ok':'warn',r.ok?'UP':'ERR');
-  } catch(e) { setStatus('espn','error','DOWN'); }
-  try {
-    const r = await fetch(`${API}/api/sao/test`);
-    const d = await r.json();
-    setStatus('sao',d.ok?'ok':'warn',d.ok?'UP':'SLOW');
-  } catch(e) { setStatus('sao','warn','N/A'); }
-  try {
-    const r = await fetch(`${API}/api/espn/injuries/nba`);
-    const d = await r.json();
-    if (d.count > 0) document.getElementById('inj-nav').textContent = `🏥 Injuries (${d.count})`;
-  } catch(e) {}
+
+  // ESPN
+  if (espnRes.status === 'fulfilled') {
+    setStatus('espn', espnRes.value.ok ? 'ok' : 'warn', espnRes.value.ok ? 'UP' : 'ERR');
+  } else { setStatus('espn','error','DOWN'); }
+
+  // SAO
+  if (saoRes.status === 'fulfilled' && saoRes.value) {
+    setStatus('sao', saoRes.value.ok ? 'ok' : 'warn', saoRes.value.ok ? 'UP' : 'SLOW');
+  } else { setStatus('sao','warn','N/A'); }
+
+  // Injuries count
+  if (injRes.status === 'fulfilled' && injRes.value?.count > 0) {
+    document.getElementById('inj-nav').textContent = `🏥 Injuries (${injRes.value.count})`;
+  }
 }
 
 // ── Games loading ─────────────────────────────────────────────────────────
 async function loadGames() {
   try {
-    let games = [];
     const todayStr = new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
-    for (const [sh] of Object.entries(SPORT_MAP)) {
-      try {
-        const r = await fetch(`${API}/api/espn/scores/${sh}`);
-        if (!r.ok) continue;
-        const d = await r.json();
-        (d.games||[]).map(normalizeGame).forEach(g => {
-          const gd = new Date(g.commence_time||g.date).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
-          if (gd === todayStr) games.push({...g, _sh:sh});
-        });
-      } catch(e) {}
+    // Fetch all sports in parallel — not sequential
+    const results = await Promise.allSettled(
+      Object.keys(SPORT_MAP).map(sh =>
+        fetch(`${API}/api/espn/scores/${sh}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => ({ sh, games: d?.games || [] }))
+      )
+    );
+    let games = [];
+    for (const res of results) {
+      if (res.status !== 'fulfilled' || !res.value) continue;
+      const { sh, games: raw } = res.value;
+      raw.map(normalizeGame).forEach(g => {
+        const gd = new Date(g.commence_time||g.date).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+        if (gd === todayStr) games.push({...g, _sh:sh});
+      });
     }
     if (!games.length) throw new Error('no games via proxy');
     allGames = games;
@@ -705,30 +720,34 @@ async function loadGames() {
   } catch(e) {
     addLog('warn','proxy offline — ESPN direct fallback');
     try {
-      const sports = [['nba','basketball','nba'],['nfl','americanfootball','nfl'],['mlb','baseball','mlb'],['nhl','icehockey','nhl']];
+      const ESPN_SPORTS = [['nba','basketball','nba'],['nfl','americanfootball','nfl'],['mlb','baseball','mlb'],['nhl','icehockey','nhl']];
+      const fbResults = await Promise.allSettled(
+        ESPN_SPORTS.map(([sh,sp,lg]) =>
+          fetch(`https://site.api.espn.com/apis/site/v2/sports/${sp}/${lg}/scoreboard`)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => ({ sh, events: d?.events || [] }))
+        )
+      );
       let fb = [];
-      for (const [sh,sp,lg] of sports) {
-        try {
-          const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sp}/${lg}/scoreboard`);
-          if (!r.ok) continue;
-          const d = await r.json();
-          (d.events||[]).forEach(evt => {
-            const comp = evt.competitions?.[0];
-            if (!comp) return;
-            const away = comp.competitors?.find(c=>c.homeAway==='away');
-            const home = comp.competitors?.find(c=>c.homeAway==='home');
-            fb.push({
-              away_team: away?.team?.displayName||'?',
-              home_team: home?.team?.displayName||'?',
-              awayScore: away?.score||'',
-              homeScore: home?.score||'',
-              commence_time: evt.date,
-              completed: comp.status?.type?.completed||false,
-              statusText: comp.status?.type?.shortDetail||'',
-              _sh: sh
-            });
+      for (const res of fbResults) {
+        if (res.status !== 'fulfilled' || !res.value) continue;
+        const { sh, events } = res.value;
+        events.forEach(evt => {
+          const comp = evt.competitions?.[0];
+          if (!comp) return;
+          const away = comp.competitors?.find(c=>c.homeAway==='away');
+          const home = comp.competitors?.find(c=>c.homeAway==='home');
+          fb.push({
+            away_team: away?.team?.displayName||'?',
+            home_team: home?.team?.displayName||'?',
+            awayScore: away?.score||'',
+            homeScore: home?.score||'',
+            commence_time: evt.date,
+            completed: comp.status?.type?.completed||false,
+            statusText: comp.status?.type?.shortDetail||'',
+            _sh: sh
           });
-        } catch(e2) {}
+        });
       }
       if (fb.length) {
         allGames = fb;

@@ -1383,11 +1383,22 @@ async function espnFetch(url, cacheMins = 5) {
   const cacheKey = `espn_${url.replace(/https?:\/\/[^/]+/,'').replace(/[^a-z0-9]/gi,'_').slice(0,80)}`;
   const cached = getCached(cacheKey, cacheMins * 60 * 1000);
   if (cached) return cached;
-  const r = await fetch(url, { headers: { 'Accept':'application/json', 'User-Agent':'Mozilla/5.0' } });
-  if (!r.ok) throw new Error(`ESPN API HTTP ${r.status}: ${url}`);
-  const data = await r.json();
-  setCache(cacheKey, data);
-  return data;
+  const ctrl = new AbortController();
+  const tmt  = setTimeout(() => ctrl.abort(), 5000); // 5s timeout — never block forever
+  try {
+    const r = await fetch(url, {
+      headers: { 'Accept':'application/json', 'User-Agent':'Mozilla/5.0' },
+      signal: ctrl.signal
+    });
+    clearTimeout(tmt);
+    if (!r.ok) throw new Error(`ESPN API HTTP ${r.status}: ${url}`);
+    const data = await r.json();
+    setCache(cacheKey, data);
+    return data;
+  } catch(e) {
+    clearTimeout(tmt);
+    throw e;
+  }
 }
 
 // ── ESPN NEWS (JSON API — always works, no scraping) ──
@@ -1426,12 +1437,15 @@ app.get('/api/news/:sport', async (req, res) => {
     addLog('warn','NewsAPI',`ESPN ${em.short} failed`,e.message);
   }
 
-  // SAO news section — ActionNetwork articles linked from SAO pages
+  // SAO news section — with 3s timeout so it never blocks dashboard load
   try {
     const saoSport = { nba:'nba', nfl:'nfl', mlb:'mlb', nhl:'nhl', ncaab:'ncaab', ncaaf:'ncaaf', ncaab2:'ncaab', tennis:'tennis' }[sport];
     if (saoSport) {
+      const ctrl = new AbortController();
+      const tmt  = setTimeout(() => ctrl.abort(), 3000); // 3s max
       const saoUrl = `https://www.scoresandodds.com/${saoSport}`;
-      const r = await fetch(saoUrl, { headers: SCRAPE_HEADERS });
+      const r = await fetch(saoUrl, { headers: SCRAPE_HEADERS, signal: ctrl.signal });
+      clearTimeout(tmt);
       if (r.ok) {
         const html = await r.text();
         const $ = cheerio.load(html);
