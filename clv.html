@@ -167,8 +167,12 @@ document.getElementById('nav-container').innerHTML = navHTML('clv');
 checkServerStatus();
 
 const SPORT_KEY_MAP = {
-  NBA:'basketball_nba', NFL:'americanfootball_nfl',
-  MLB:'baseball_mlb',   NHL:'icehockey_nhl', EPL:'soccer_epl'
+  NBA:'basketball_nba',   NFL:'americanfootball_nfl',
+  MLB:'baseball_mlb',     NHL:'icehockey_nhl',
+  EPL:'soccer_epl',       MLS:'soccer_usa_mls',
+  NCAAB:'basketball_ncaab', NCAAF:'americanfootball_ncaaf',
+  // For parlays/sharp signals try all sports
+  PARLAY:'all',  SHARP:'all',  PROP:'all',
 };
 
 let entries = [];
@@ -248,8 +252,8 @@ async function fetchClosingOdds() {
       autoCalcCLV();
       btn.textContent = '✓'; btn.className = 'auto-btn done';
     } else {
-      document.getElementById('m-status').textContent = `Not found: ${d.error || 'game not in current odds'}`;
-      btn.textContent = '⚡'; btn.className = 'auto-btn';
+      document.getElementById('m-status').textContent = `Not in today's odds — game may be off-season or already final`;
+      btn.textContent = '—'; btn.className = 'auto-btn';
     }
   } catch(e) {
     document.getElementById('m-status').textContent = 'Error: ' + e.message;
@@ -372,7 +376,7 @@ function renderEntries() {
 async function autoFillEntry(id) {
   const e = entries.find(x => x.id === id);
   if (!e) return;
-  const sportKey = SPORT_KEY_MAP[e.sport] || 'basketball_nba';
+  const sportKey = SPORT_KEY_MAP[e.sport] || 'all';
   const teamGuess = extractTeamFromBet(e.bet || '');
   const btn = document.querySelector(`[onclick="autoFillEntry(${id})"]`);
   if (btn) { btn.textContent = '…'; btn.className = 'auto-btn fetching'; }
@@ -391,8 +395,8 @@ async function autoFillEntry(id) {
       sbLog(`CLV captured: ${e.bet?.slice(0,20)} → ${clv >= 0 ? '+' : ''}${clv}`, 'ok');
       await load();
     } else {
-      sbLog(`Not found: ${teamGuess}`, 'warn');
-      if (btn) { btn.textContent = '⚡'; btn.className = 'auto-btn'; }
+      sbLog(`No odds today: ${teamGuess}`, 'warn');
+      if (btn) { btn.textContent = '—'; btn.className = 'auto-btn'; }
     }
   } catch(err) {
     sbLog('Fetch failed: ' + err.message, 'err');
@@ -450,7 +454,7 @@ async function importBet(betId) {
   const bets = await getBets();
   const b    = bets.find(x => x.id === betId);
   if (!b) return;
-  const sportKey  = SPORT_KEY_MAP[b.sport] || 'basketball_nba';
+  const sportKey  = SPORT_KEY_MAP[b.sport] || 'all';
   const teamGuess = extractTeamFromBet(b.bet || '');
   const btn = document.querySelector(`[onclick="importBet(${betId})"]`);
   if (btn) { btn.textContent = '…'; btn.className = 'auto-btn fetching'; }

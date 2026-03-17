@@ -213,13 +213,34 @@ app.get('/api/clv/closing/:sport/:team', async (req, res) => {
   const cfg = loadConfig();
   if (!cfg.oddsKey) return res.json({ error: 'No odds API key', odds: null });
 
-  const sport = req.params.sport;
-  const team  = decodeURIComponent(req.params.team).toLowerCase();
+  const sportParam = req.params.sport;
+  const team  = decodeURIComponent(req.params.team).toLowerCase().trim();
+
+  // Build list of sport keys to try — always try the given sport first, then fallback
+  const ALL_SPORTS = ['basketball_nba','americanfootball_nfl','baseball_mlb','icehockey_nhl','basketball_ncaab'];
+  const SPORT_FALLBACKS = {
+    'basketball_nba':        ['basketball_nba','basketball_ncaab'],
+    'americanfootball_nfl':  ['americanfootball_nfl','americanfootball_ncaaf'],
+    'baseball_mlb':          ['baseball_mlb'],
+    'icehockey_nhl':         ['icehockey_nhl'],
+    'soccer_epl':            ['soccer_epl','soccer_usa_mls'],
+    'basketball_ncaab':      ['basketball_ncaab','basketball_nba'],
+    'all':                   ALL_SPORTS,  // try everything for PARLAY/SHARP/unknown
+  };
+  // For PARLAY / SHARP / unknown — try everything
+  const sportsToTry = SPORT_FALLBACKS[sportParam] || ALL_SPORTS;
 
   try {
-    const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${cfg.oddsKey}&regions=us,us2&markets=h2h,spreads&oddsFormat=american&bookmakers=hardrockbet,fanduel,draftkings,betmgm`;
-    const r   = await fetch(url);
-    const games = await r.json();
+    let games = [];
+    for (const sport of sportsToTry) {
+      try {
+        const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${cfg.oddsKey}&regions=us,us2&markets=h2h,spreads&oddsFormat=american&bookmakers=hardrockbet,fanduel,draftkings,betmgm`;
+        const r = await fetch(url);
+        if (!r.ok) continue;
+        const data = await r.json();
+        if (Array.isArray(data) && data.length) games = games.concat(data);
+      } catch(e) { continue; }
+    }
 
     // Fuzzy match helper — handles multi-word team names
     function teamMatches(apiTeam, query) {
@@ -359,7 +380,7 @@ app.get('/api/line-movement', async (req, res) => {
       const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${cfg.oddsKey}&regions=us,us2&markets=h2h,spreads,totals&oddsFormat=american&bookmakers=hardrockbet,fanduel,draftkings`;
       const r = await fetch(url);
       if (!r.ok) continue;
-      const games = await r.json();
+  
       if (!Array.isArray(games)) continue;
       games.forEach(g => {
         g.bookmakers?.forEach(bk => {
