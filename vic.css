@@ -89,7 +89,7 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse 60% 30% at 50% -5%, rgba(56,189,248,0.06) 0%, transparent 70%);
+  background: radial-gradient(ellipse 60% 40% at 50% -10%, rgba(0,255,65,0.03) 0%, transparent 65%);
   pointer-events: none;
   z-index: 0;
 }
@@ -101,12 +101,12 @@ body::before {
   position: fixed;
   top: 0; left: 0; right: 0;
   height: 48px;
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border-subtle);
+  background: #030803;
+  border-bottom: 2px solid #0f2010;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 18px;
   z-index: 200;
   gap: 16px;
 }
@@ -120,31 +120,35 @@ body::before {
 }
 
 .top-header-logo img {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
   object-fit: cover;
+  border: 1px solid #1a4a1a;
 }
 
 .top-header-logo .vic-name {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--blue);
-  letter-spacing: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #00ff41;
+  letter-spacing: 3px;
 }
 
 /* Current page breadcrumb */
 .top-header-page {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--tx-1);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2a6a2a;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 }
 
 .top-header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   margin-left: auto;
 }
 
@@ -153,21 +157,23 @@ body::before {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  color: var(--tx-3);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #2a6a2a;
 }
 
 /* Settings link */
 .top-header-settings {
-  color: var(--tx-3);
+  color: #2a6a2a;
   text-decoration: none;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
-  padding: 4px;
-  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  border-radius: 2px;
   transition: color .12s;
+  font-family: 'JetBrains Mono', monospace;
 }
-.top-header-settings:hover { color: var(--tx-1); }
+.top-header-settings:hover { color: #00ff41; }
 
 /* ═══════════════════════════════════════════
    TERMINAL FOOTER NAV
@@ -969,13 +975,13 @@ body::before {
 .nav-item { display: none; }
 
 .status-dot {
-  width: 6px; height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-  flex-shrink: 0;
+  background: #00ff41;
+  box-shadow: 0 0 5px #00ff41;
 }
-.status-dot.offline { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.status-dot.offline { background: #cc3333; box-shadow: 0 0 5px #cc3333; }
 
 /* ═══════════════════════════════════════════
    MAIN LAYOUT — no sidebar, top+bottom bars
