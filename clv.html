@@ -29,9 +29,10 @@
   <div class="page-hdr">
     <div class="page-hdr-brand"><div>
       <div class="page-hdr-title">CLV TRACKER</div>
-      <div class="page-hdr-sub">Closing line value · sharpness indicator · auto-capture from live odds</div>
+      <div class="page-hdr-sub">Closing line value · sharpness indicator · snapshot before tip-off → capture after final</div>
     </div></div>
     <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="snapshotPending()" title="Snapshot current odds for all pending bets — run this BEFORE games start">📸 SNAPSHOT PENDING</button>
       <button class="t-btn-ghost" onclick="autoCaptureAll()">⚡ AUTO-CAPTURE ALL</button>
       <button class="t-btn-ghost" onclick="openAddModal()">+ ADD ENTRY</button>
       <button class="t-btn" onclick="load()">↺ REFRESH</button>
@@ -94,9 +95,14 @@
         <div class="tl"><span class="td">FORMULA</span><span>CLV = (Your Implied %) − (Closing Implied %)</span></div>
         <div class="tl"><span class="td">EXAMPLE</span><span>You bet -115 (46.5% impl), closed -125 (55.6% impl) → CLV = −9.1</span></div>
         <div class="tl"><span class="td">AUTO</span><span>AUTO-CAPTURE fetches the closing line from Odds API <strong style="color:#00ff41;">at game time</strong></span></div>
-        <div class="tl"><span class="td">FINAL</span><span class="tg">Best — game over, true closing line captured via scores API</span></div>
-        <div class="tl"><span class="td">PRE-GAME</span><span class="ty">Good — game hasn't started, capture now to lock in closing line</span></div>
-        <div class="tl"><span class="td">MANUAL</span><span style="color:#2a6a2a;">Enter closing odds yourself — check the book you bet with</span></div>
+        <div class="tl"><span class="td" style="color:#2a8a2a;">SNAP</span><span class="tg">Best — odds auto-snapped when bet was logged or via 📸 SNAPSHOT</span></div>
+        <div class="tl"><span class="td" style="color:#1e4a1e;">FINAL</span><span class="tg">Good — fetched from scores API after game ended</span></div>
+        <div class="tl"><span class="td" style="color:#aa9900;">PRE</span><span class="ty">OK — captured before tip-off via AUTO-CAPTURE</span></div>
+        <div class="tl"><span class="td">MANUAL</span><span style="color:#2a6a2a;">Enter closing odds yourself from your sportsbook</span></div>
+        <div class="t-sec" style="margin-top:12px;"><span>// BEST WORKFLOW</span></div>
+        <div class="tl"><span class="td">1.</span><span>Log your bet via Legs page or Tracker → odds auto-snapped immediately</span></div>
+        <div class="tl"><span class="td">2.</span><span>Before games start → click <strong style="color:#00ff41;">📸 SNAPSHOT PENDING</strong> to lock in all lines</span></div>
+        <div class="tl"><span class="td">3.</span><span>After games end → click <strong style="color:#00ff41;">⚡ AUTO-CAPTURE ALL</strong> to finalize CLV</span></div>
       </div>
 
     </div>
@@ -362,8 +368,9 @@ function renderEntries() {
         <td style="color:#aacc00;">${e.betOdds ? fmtOdds(e.betOdds) : '—'}</td>
         <td style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
           <span style="color:#2a6a2a;">${e.closeOdds ? fmtOdds(e.closeOdds) : '—'}</span>
-          ${e.closeStatus === 'FINAL' ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:#1e4a1e;letter-spacing:1px;">FINAL</span>' : ''}
-          ${e.closeStatus === 'PRE-GAME' ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:#aa9900;letter-spacing:1px;">PRE</span>' : ''}
+          ${e.closeStatus === 'FINAL'    ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:#1e4a1e;letter-spacing:1px;">FINAL</span>' : ''}
+          ${e.closeStatus === 'PRE-GAME'  ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:#aa9900;letter-spacing:1px;">PRE</span>' : ''}
+          ${e.closeStatus === 'SNAPSHOT'  ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:#2a8a2a;letter-spacing:1px;">SNAP</span>' : ''}
           ${!e.closeOdds ? `<button class="auto-btn" onclick="autoFillEntry(${e.id})" title="Fetch closing odds">⚡</button>` : ''}
         </td>
         <td class="${clvCls}" style="font-weight:700;">${clvStr}</td>
@@ -592,6 +599,28 @@ function switchPageTab(name, el) {
 }
 
 // ── Sidebar helpers ───────────────────────────────────────────────────────
+// ── Snapshot pending bets ─────────────────────────────────────────────────
+async function snapshotPending() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '📸 SNAPPING...';
+  sbLog('Snapshotting odds for pending bets…');
+  try {
+    const r = await fetch(`${API}/api/clv/snapshot-pending`, { method: 'POST' });
+    const d = await r.json();
+    sbLog(`Snapshot done: ${d.snapped} of ${d.total} bets captured`, 'ok');
+    btn.textContent = `📸 DONE (${d.snapped})`;
+    setTimeout(() => {
+      btn.textContent = '📸 SNAPSHOT PENDING';
+      btn.disabled = false;
+    }, 3000);
+  } catch(e) {
+    sbLog('Snapshot failed: ' + e.message, 'err');
+    btn.textContent = '📸 SNAPSHOT PENDING';
+    btn.disabled = false;
+  }
+}
+
 function sbLog(msg, cls='') {
   const el = document.getElementById('sb-log');
   if (!el) return;

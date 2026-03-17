@@ -16,6 +16,7 @@ const ALERTS_FILE = path.join(DATA_DIR, 'alerts.json');
 const LINE_SNAP_FILE = path.join(DATA_DIR, 'line_snapshots.json');
 const PARLAY_FILE = path.join(DATA_DIR, 'parlays.json');
 const SCRAPE_CACHE_FILE = path.join(DATA_DIR, 'scrape_cache.json');
+const CLV_SNAP_FILE    = path.join(DATA_DIR, 'clv_snapshots.json');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -46,6 +47,56 @@ function loadParlays() {
   try { return JSON.parse(fs.readFileSync(PARLAY_FILE, 'utf8')); } catch { return []; }
 }
 function saveParlays(p) { fs.writeFileSync(PARLAY_FILE, JSON.stringify(p, null, 2)); }
+// CLV snapshots: { "TeamName|sportKey": { odds, book, ts, game } }
+function loadCLVSnaps() {
+  try { return JSON.parse(fs.readFileSync(CLV_SNAP_FILE, 'utf8')); } catch { return {}; }
+}
+function saveCLVSnaps(s) {
+  try { fs.writeFileSync(CLV_SNAP_FILE, JSON.stringify(s, null, 2)); } catch(e) {}
+}
+async function snapshotOddsForTeam(team, sportKey) {
+  // Store current odds for a team so we have them even after game ends
+  const cfg = loadConfig();
+  if (!cfg.oddsKey || !team) return;
+  const snaps = loadCLVSnaps();
+  const key   = `${team.toLowerCase()}|${sportKey}`;
+  // Don't re-snapshot too frequently (within 30 min)
+  if (snaps[key] && (Date.now() - snaps[key].ts) < 30 * 60 * 1000) return;
+  try {
+    const url = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${cfg.oddsKey}&regions=us,us2&markets=h2h,spreads&oddsFormat=american&bookmakers=hardrockbet,fanduel,draftkings,betmgm`;
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const games = await r.json();
+    if (!Array.isArray(games)) return;
+    for (const game of games) {
+      const isAway = game.away_team?.toLowerCase().includes(team.toLowerCase());
+      const isHome = game.home_team?.toLowerCase().includes(team.toLowerCase());
+      if (!isAway && !isHome) continue;
+      const side = isAway ? game.away_team : game.home_team;
+      let bestOdds = null, bestBook = null;
+      for (const book of (game.bookmakers || [])) {
+        for (const mkt of (book.markets || [])) {
+          if (!['h2h','spreads'].includes(mkt.key)) continue;
+          const out = mkt.outcomes?.find(o => o.name === side);
+          if (!out) continue;
+          if (bestOdds === null || Math.abs(out.price) < Math.abs(bestOdds)) {
+            bestOdds = out.price; bestBook = book.key;
+          }
+        }
+        if (bestOdds !== null) break;
+      }
+      if (bestOdds !== null) {
+        snaps[key] = { odds: bestOdds, book: bestBook, team: side,
+          game: `${game.away_team} @ ${game.home_team}`,
+          ts: Date.now(), date: new Date().toLocaleDateString() };
+        saveCLVSnaps(snaps);
+        addLog('info', 'CLV', `Odds snapshot: ${side}`, `${bestOdds} @ ${bestBook}`);
+        return snaps[key];
+      }
+    }
+  } catch(e) {}
+}
+
 function loadSnapshots() {
   try { return JSON.parse(fs.readFileSync(LINE_SNAP_FILE, 'utf8')); } catch { return {}; }
 }
@@ -185,10 +236,24 @@ app.post('/api/config', (req, res) => { saveConfig(req.body); res.json({ ok: tru
 
 // Bets endpoints
 app.get('/api/bets', (req, res) => res.json(loadBets()));
-app.post('/api/bets', (req, res) => {
+app.post('/api/bets', async (req, res) => {
   const bets = loadBets();
-  const bet = { ...req.body, id: Date.now(), date: new Date().toLocaleDateString() };
+  const bet  = { ...req.body, id: Date.now(), date: new Date().toLocaleDateString() };
   bets.push(bet); saveBets(bets); res.json(bet);
+  // Auto-snapshot current odds for CLV tracking (async, don't block response)
+  if (bet.odds && bet.sport) {
+    const SPORT_KEYS = {
+      NBA:'basketball_nba', NFL:'americanfootball_nfl', MLB:'baseball_mlb',
+      NHL:'icehockey_nhl', NCAAB:'basketball_ncaab', EPL:'soccer_epl'
+    };
+    const sportKey  = SPORT_KEYS[bet.sport] || 'basketball_nba';
+    const teamGuess = (bet.bet || '').replace(/^(over|under)\s+[\d.]+\s*/i,'')
+      .replace(/\s*[@\/\(\[].*/g,'').replace(/\s+(ml|vs\.?|puck line).*/gi,'')
+      .replace(/\s+[+-]\d+(\.\d+)?\s*$/i,'').trim();
+    if (teamGuess.length >= 3) {
+      snapshotOddsForTeam(teamGuess, sportKey).catch(() => {});
+    }
+  }
 });
 app.put('/api/bets/:id', (req, res) => {
   let bets = loadBets();
@@ -207,6 +272,30 @@ app.post('/api/clv', (req, res) => {
   const entry = { ...req.body, id: Date.now(), date: new Date().toLocaleDateString() };
   clv.push(entry); saveClv(clv); res.json(entry);
 });
+// POST /api/clv/snapshot-pending — snapshot odds for all pending bets
+app.post('/api/clv/snapshot-pending', async (req, res) => {
+  const bets = loadBets().filter(b => b.result === 'pending' && b.odds && b.sport);
+  const SPORT_KEYS = {
+    NBA:'basketball_nba', NFL:'americanfootball_nfl', MLB:'baseball_mlb',
+    NHL:'icehockey_nhl', NCAAB:'basketball_ncaab', EPL:'soccer_epl'
+  };
+  let snapped = 0;
+  for (const bet of bets) {
+    const sportKey  = SPORT_KEYS[bet.sport] || 'basketball_nba';
+    const teamGuess = (bet.bet || '').replace(/^(over|under)\s+[\d.]+\s*/i,'')
+      .replace(/\s*[@\/\(\[].*/g,'').replace(/\s+(ml|vs\.?|puck line).*/gi,'')
+      .replace(/\s+[+-]\d+(\.\d+)?\s*$/i,'').trim();
+    if (teamGuess.length >= 3) {
+      const result = await snapshotOddsForTeam(teamGuess, sportKey).catch(() => null);
+      if (result) snapped++;
+    }
+  }
+  res.json({ ok: true, snapped, total: bets.length });
+});
+
+// GET /api/clv/snapshots — return all stored CLV snapshots
+app.get('/api/clv/snapshots', (req, res) => res.json(loadCLVSnaps()));
+
 // GET /api/clv/closing/:sport/:team
 // CLV closing line strategy:
 //   1. Check Odds API SCORES endpoint for completed games (has closing line data)
@@ -251,6 +340,24 @@ app.get('/api/clv/closing/:sport/:team', async (req, res) => {
   }
 
   try {
+    // Step 0: Check our own CLV snapshot store first (most reliable for closed games)
+    const clvSnaps = loadCLVSnaps();
+    const snapKeys = Object.keys(clvSnaps);
+    for (const key of snapKeys) {
+      const snap = clvSnaps[key];
+      if (!snap.team) continue;
+      const snapTeam = snap.team.toLowerCase();
+      if (snapTeam.includes(team) || team.split(' ').some(w => w.length > 3 && snapTeam.includes(w))) {
+        addLog('info', 'CLV', `Snap hit: ${snap.team}`, `${snap.odds} @ ${snap.book} (${snap.date})`);
+        return res.json({
+          ok: true, odds: snap.odds, book: snap.book,
+          team: snap.team, game: snap.game || snap.team,
+          isFinal: false, status: 'SNAPSHOT',
+          snapDate: snap.date
+        });
+      }
+    }
+
     // Step 1: Try Odds API /scores endpoint — returns completed + in-progress games
     // The scores endpoint returns last_h2h which IS the closing line data
     for (const sport of sportsToTry) {
