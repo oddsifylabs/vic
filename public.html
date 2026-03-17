@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Public Betting</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.pub-card{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:11px 14px;margin-bottom:6px;}
+.pub-card.fade{border-left:3px solid #cc3333;}
+.pub-card.steam{border-left:3px solid #aa9900;}
+.pub-card.sharp{border-left:3px solid #00ff41;}
+.bar-wrap{background:#0a1a0a;border-radius:2px;height:5px;margin:3px 0;overflow:hidden;}
+.bar-fill{height:100%;border-radius:2px;transition:width .4s;}
+.pct-num{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#00ff41;}
+.pct-lbl{font-family:'JetBrains Mono',monospace;font-size:8px;color:#2a6a2a;letter-spacing:1px;text-transform:uppercase;margin-top:1px;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">PUBLIC BETTING %</div><div class="page-hdr-sub">SAO consensus · sharp vs square · fade spots · RLM</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="aiSharpAnalysis()">AI SHARP ANALYSIS</button>
+      <button class="t-btn" onclick="loadPublic()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-games">—</div><div class="tkl">GAMES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-fade" style="color:#cc3333;">—</div><div class="tkl">FADE SPOTS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-steam" style="color:#aa9900;">—</div><div class="tkl">STEAM</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-rlm" style="color:#00ff41;">—</div><div class="tkl">RLM</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="selectSport('nba',this)">NBA</button>
+      <button class="page-tab" onclick="selectSport('nfl',this)">NFL</button>
+      <button class="page-tab" onclick="selectSport('mlb',this)">MLB</button>
+      <button class="page-tab" onclick="selectSport('nhl',this)">NHL</button>
+      <button class="page-tab" onclick="selectSport('ncaab',this)">NCAAB</button>
+    </div>
+    <div class="page-body" id="pub-body">
+      <div class="tl"><span class="td">SYS&gt;</span><span class="ta">select sport to load consensus...</span></div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">SAO</span><span id="sb-sao" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">SHARP NOTES</div>
+    <div id="ai-sidebar" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;line-height:1.7;padding:4px;">run AI analysis →</div>
+    <div class="psb-sec" style="margin-top:10px;">GUIDE</div>
+    <div class="psb-row"><span class="psb-label">FADE</span><span style="color:#cc3333;">70%+ public</span></div>
+    <div class="psb-row"><span class="psb-label">STEAM</span><span style="color:#aa9900;">sharp line move</span></div>
+    <div class="psb-row"><span class="psb-label">RLM</span><span style="color:#00ff41;">reverse line move</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="public.html">PUBLIC %</a>
+    <a class="psb-quicklink" href="vegas.html">VEGAS</a>
+    <a class="psb-quicklink" href="alerts.html">ALERTS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('public');
+checkServerStatus();
+let currentSport='nba',pubData=[],pubText='';
+loadPublic();
+function selectSport(sport,el){currentSport=sport;document.querySelectorAll('.page-tab').forEach(b=>b.classList.remove('active'));el.classList.add('active');loadPublic();}
+async function loadPublic(){
+  const body=document.getElementById('pub-body');
+  body.innerHTML=`<div class="tl"><span class="td">SYS&gt;</span><span class="ta">scraping SAO consensus for ${currentSport.toUpperCase()}...</span></div>`;
+  try{
+    const r=await fetch(`${API}/api/sao/consensus/${currentSport}`);
+    const d=await r.json();pubData=d.games||[];pubText=d.text||'';
+    document.getElementById('sb-sao').className='psb-ok';document.getElementById('sb-sao').textContent='OK';
+    const fade=pubData.filter(g=>parseFloat(g.betPct1)>70||parseFloat(g.betPct2)>70).length;
+    const steam=pubData.filter(g=>g.steam).length;
+    const rlm=pubData.filter(g=>g.rlm).length;
+    document.getElementById('k-games').textContent=pubData.length||'—';
+    document.getElementById('k-fade').textContent=fade||'—';
+    document.getElementById('k-steam').textContent=steam||'—';
+    document.getElementById('k-rlm').textContent=rlm||'—';
+    if(!pubData.length){body.innerHTML=pubText?`<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;line-height:1.9;white-space:pre-wrap;">${pubText}</div>`:'<div class="tl"><span class="tm">no data — off-season</span></div>';return;}
+    renderPublic();sbLog(`${pubData.length} games loaded`,'ok');
+  }catch(e){body.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;document.getElementById('sb-sao').className='psb-err';document.getElementById('sb-sao').textContent='ERROR';}
+}
+function renderPublic(){
+  document.getElementById('pub-body').innerHTML=pubData.map(g=>{
+    const bp1=parseFloat(g.betPct1)||0,bp2=parseFloat(g.betPct2)||0;
+    const mp1=parseFloat(g.moneyPct1)||0,mp2=parseFloat(g.moneyPct2)||0;
+    const fade=bp1>70||bp2>70;const steam=g.steam||false;const rlm=g.rlm||false;
+    const cls=fade?'fade':steam?'steam':rlm?'sharp':'';
+    const sigTag=fade?`<span style="color:#cc3333;font-family:'JetBrains Mono',monospace;font-size:9px;">[FADE SPOT]</span>`:steam?`<span style="color:#aa9900;font-family:'JetBrains Mono',monospace;font-size:9px;">[STEAM]</span>`:rlm?`<span style="color:#00ff41;font-family:'JetBrains Mono',monospace;font-size:9px;">[RLM]</span>`:'';
+    return `<div class="pub-card ${cls}">
+      <div class="tl" style="border:none;padding:0;margin-bottom:8px;">
+        <span class="tb">${g.away||'Away'} @ ${g.home||'Home'}</span>
+        ${g.time?`<span class="td">${g.time}</span>`:''}
+        ${sigTag}
+        ${g.spread?`<span class="ty">${g.spread}</span>`:''}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div class="pct-lbl">BETS %</div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.team1||g.away||'?'}</span><span class="pct-num" style="font-size:12px;">${bp1}%</span></div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${bp1}%;background:${bp1>60?'#cc3333':'#2a8a2a'};"></div></div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.team2||g.home||'?'}</span><span class="pct-num" style="font-size:12px;">${bp2}%</span></div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${bp2}%;background:${bp2>60?'#cc3333':'#2a8a2a'};"></div></div>
+        </div>
+        <div>
+          <div class="pct-lbl">MONEY %</div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.team1||g.away||'?'}</span><span class="pct-num" style="font-size:12px;">${mp1}%</span></div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${mp1}%;background:${mp1>60?'#cc3333':'#00ff41'};"></div></div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.team2||g.home||'?'}</span><span class="pct-num" style="font-size:12px;">${mp2}%</span></div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${mp2}%;background:${mp2>60?'#cc3333':'#00ff41'};"></div></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function aiSharpAnalysis(){
+  const sidebar=document.getElementById('ai-sidebar');sidebar.textContent='analyzing...';
+  const ctx=pubText||pubData.map(g=>`${g.away||''}@${g.home||''}: Bets ${g.betPct1}/${g.betPct2}% Money ${g.moneyPct1}/${g.moneyPct2}%`).join('\n');
+  try{
+    const text=await proxyClaudeWithSearch(`Sharp ${currentSport.toUpperCase()} analyst. Top 3 edges from public data.\n${ctx}\n1 line each. Be specific.`,400);
+    sidebar.innerHTML=text.split('\n').filter(l=>l.trim()).map(l=>`<div style="margin-bottom:4px;">${l}</div>`).join('');
+  }catch(e){sidebar.textContent='Error: '+e.message;}
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

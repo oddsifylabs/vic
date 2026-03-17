@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Vegas Odds</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.odds-tbl{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.odds-tbl th{padding:6px 10px;text-align:left;color:#2a6a2a;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid #0f2010;position:sticky;top:0;background:#080e08;}
+.odds-tbl td{padding:7px 10px;border-bottom:1px solid #060c06;vertical-align:middle;}
+.odds-tbl tr:hover td{background:#060c06;}
+.move-up{color:#00ff41;}.move-down{color:#cc3333;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">VEGAS ODDS</div><div class="page-hdr-sub">SAO live lines · line movement · AI sharp analysis</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="aiLineAnalysis()">AI ANALYSIS</button>
+      <button class="t-btn" onclick="loadVegas()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-games">—</div><div class="tkl">GAMES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-moves" style="color:#aa9900;">—</div><div class="tkl">LINE MOVES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-sharp">—</div><div class="tkl">SHARP MOVES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-ts">—</div><div class="tkl">UPDATED</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="selectSport('nba',this)">NBA</button>
+      <button class="page-tab" onclick="selectSport('nfl',this)">NFL</button>
+      <button class="page-tab" onclick="selectSport('mlb',this)">MLB</button>
+      <button class="page-tab" onclick="selectSport('nhl',this)">NHL</button>
+      <button class="page-tab" onclick="selectSport('ncaab',this)">NCAAB</button>
+      <button class="page-tab" onclick="selectSport('soccer',this)">SOCCER</button>
+    </div>
+    <div class="page-body" id="vegas-body">
+      <div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading lines...</span></div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">SAO</span><span id="sb-sao" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">AI ANALYSIS</div>
+    <div id="ai-sidebar" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;line-height:1.7;padding:4px;">run analysis →</div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="vegas.html">VEGAS</a>
+    <a class="psb-quicklink" href="odds.html">ODDS</a>
+    <a class="psb-quicklink" href="public.html">PUBLIC %</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('vegas');
+checkServerStatus();
+let currentSport='nba',oddsData=[],oddsText='';
+loadVegas();
+function selectSport(sport,el){currentSport=sport;document.querySelectorAll('.page-tab').forEach(b=>b.classList.remove('active'));el.classList.add('active');loadVegas();}
+async function loadVegas(){
+  const body=document.getElementById('vegas-body');
+  body.innerHTML=`<div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading ${currentSport.toUpperCase()} from SAO...</span></div>`;
+  try{
+    const r=await fetch(`${API}/api/sao/games/${currentSport}`);
+    const d=await r.json();
+    oddsData=d.games||[];oddsText=d.text||'';
+    const moves=oddsData.filter(g=>g.lineMoved||g.moved).length;
+    document.getElementById('k-games').textContent=oddsData.length||'0';
+    document.getElementById('k-moves').textContent=moves;
+    document.getElementById('k-sharp').textContent=oddsData.filter(g=>g.steam).length;
+    document.getElementById('k-ts').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('sb-sao').className='psb-ok';document.getElementById('sb-sao').textContent='OK';
+    if(!oddsData.length){
+      body.innerHTML=oddsText?`<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;line-height:1.9;white-space:pre-wrap;">${oddsText}</div>`:'<div class="tl"><span class="tm">no games — sport may be off-season</span></div>';
+      return;
+    }
+    renderVegas();sbLog(`${oddsData.length} games loaded`,'ok');
+  }catch(e){body.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;sbLog(e.message,'err');document.getElementById('sb-sao').className='psb-err';document.getElementById('sb-sao').textContent='ERROR';}
+}
+function renderVegas(){
+  const body=document.getElementById('vegas-body');
+  body.innerHTML=`<table class="odds-tbl"><thead><tr><th>MATCHUP</th><th>TIME</th><th>SPREAD</th><th>TOTAL</th><th>ML</th><th>MOVE</th></tr></thead><tbody>${oddsData.map(g=>{
+    const away=g.away||g.away_team||g.awayTeam||'Away';
+    const home=g.home||g.home_team||g.homeTeam||'Home';
+    const time=g.time||g.gameTime||'—';
+    const spread=g.spread||g.homeSpread||'—';
+    const total=g.total||g.overUnder||'—';
+    const ml=g.moneyline||g.ml||'—';
+    const moved=g.lineMoved||g.moved||false;
+    const steam=g.steam||false;
+    const moveCls=moved?(steam?'move-up':'move-up'):'';
+    const moveTag=steam?'[STEAM]':moved?'MOVED':'—';
+    return `<tr${steam?' style="background:#020802;"':''}>
+      <td><div style="color:#00cc33;font-weight:700;">${away}</div><div style="color:#00cc33;font-weight:700;">${home}</div></td>
+      <td style="color:#1e4a1e;">${time}</td>
+      <td style="color:#aacc00;">${spread}</td>
+      <td style="color:#009955;">${total}</td>
+      <td style="color:#2a6a2a;">${ml}</td>
+      <td class="${moveCls}">${moveTag}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+async function aiLineAnalysis(){
+  const sidebar=document.getElementById('ai-sidebar');
+  sidebar.textContent='analyzing...';
+  const ctx=oddsText||oddsData.map(g=>`${g.away||''}@${g.home||''} spread:${g.spread||'?'} total:${g.total||'?'}${g.moved?' [MOVED]':''}`).join('\n');
+  try{
+    const text=await proxyClaudeWithSearch(`Sharp analyst. Top 3 betting edges from these ${currentSport.toUpperCase()} lines.\n\n${ctx}\n\nOutput: 3 specific bets with 1-line reason each. Be concise.`,500);
+    sidebar.innerHTML=text.split('\n').filter(l=>l.trim()).map(l=>`<div style="margin-bottom:4px;">${l}</div>`).join('');
+  }catch(e){sidebar.textContent='Error: '+e.message;}
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

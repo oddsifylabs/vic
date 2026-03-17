@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Live Scores</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.score-card{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:10px 14px;margin-bottom:6px;}
+.score-card.live{border-left:3px solid #cc3333;}
+.score-card.final{border-left:3px solid #1e4a1e;opacity:.7;}
+.score-card.upcoming{border-left:3px solid #0f2a6a;}
+.score-team{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-family:'JetBrains Mono',monospace;font-size:12px;}
+.score-name{color:#00cc33;}.score-num{color:#00ff41;font-weight:700;font-size:15px;min-width:30px;text-align:right;}
+.score-num.losing{color:#2a6a2a;}
+.score-meta{font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-top:4px;letter-spacing:.5px;display:flex;justify-content:space-between;}
+.scores-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">LIVE SCORES</div><div class="page-hdr-sub">ESPN real-time · live + upcoming + final</div></div></div>
+    <div class="page-hdr-actions">
+      <span id="auto-badge" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">MANUAL</span>
+      <button class="t-btn-ghost" onclick="toggleAuto()" id="auto-btn">AUTO</button>
+      <button class="t-btn" onclick="loadAll()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-live" style="color:#cc3333;">0</div><div class="tkl">LIVE</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-upcoming" style="color:#aacc00;">0</div><div class="tkl">UPCOMING</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-final">0</div><div class="tkl">FINAL</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-sports">—</div><div class="tkl">SPORTS</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchPageTab('all',this)">ALL</button>
+      <button class="page-tab" onclick="switchPageTab('nba',this)">NBA</button>
+      <button class="page-tab" onclick="switchPageTab('nfl',this)">NFL</button>
+      <button class="page-tab" onclick="switchPageTab('mlb',this)">MLB</button>
+      <button class="page-tab" onclick="switchPageTab('nhl',this)">NHL</button>
+      <button class="page-tab" onclick="switchPageTab('soccer',this)">SOCCER</button>
+    </div>
+    <div class="page-body">
+      <div class="page-panel active" id="panel-all"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading scores...</span></div></div>
+      <div class="page-panel" id="panel-nba"></div>
+      <div class="page-panel" id="panel-nfl"></div>
+      <div class="page-panel" id="panel-mlb"></div>
+      <div class="page-panel" id="panel-nhl"></div>
+      <div class="page-panel" id="panel-soccer"></div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">ESPN</span><span id="sb-espn" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink" href="index.html">HOME</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <a class="psb-quicklink" href="odds.html">ODDS</a>
+    <a class="psb-quicklink active-page" href="scores.html">SCORES</a>
+    <a class="psb-quicklink" href="vegas.html">VEGAS</a>
+    <div class="psb-sec" style="margin-top:10px;">LAST UPDATE</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('scores');
+checkServerStatus();
+function switchPageTab(name, el) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + name);
+  if (panel) panel.classList.add('active');
+}
+const SPORTS=[['nba','nba'],['nfl','nfl'],['mlb','mlb'],['nhl','nhl'],['epl','epl'],['mls','mls']];
+let allGames=[],autoRef=false,autoTimer=null;
+async function loadAll(){
+  document.getElementById('panel-all').innerHTML='<div class="tl"><span class="td">SYS&gt;</span><span class="ta">fetching scores...</span></div>';
+  allGames=[];
+  await Promise.all(SPORTS.map(async([sh])=>{
+    try{
+      const r=await fetch(`${API}/api/espn/scores/${sh}`);
+      if(r.ok){const d=await r.json();(d.games||[]).map(normalizeGame).forEach(g=>allGames.push({...g,_sh:sh}));}
+    }catch(e){}
+  }));
+  const live=allGames.filter(g=>g.scores&&!g.completed);
+  const final=allGames.filter(g=>g.completed);
+  const upcoming=allGames.filter(g=>!g.scores&&!g.completed);
+  document.getElementById('k-live').textContent=live.length;
+  document.getElementById('k-upcoming').textContent=upcoming.length;
+  document.getElementById('k-final').textContent=final.length;
+  document.getElementById('k-sports').textContent=[...new Set(allGames.map(g=>g._sh))].length;
+  renderAll();
+  sbLog('scores refreshed');
+}
+function renderCards(games,elId){
+  const el=document.getElementById(elId);
+  if(!el) return;
+  if(!games.length){el.innerHTML='<div class="tl"><span class="tm">no games</span></div>';return;}
+  const sorted=[...games.filter(g=>g.scores&&!g.completed),...games.filter(g=>!g.scores),...games.filter(g=>g.completed)];
+  el.innerHTML=`<div class="scores-grid">${sorted.map(g=>{
+    const t=new Date(g.commence_time||g.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const sp=g._sh?.toUpperCase()||'';
+    if(!g.scores){
+      return `<div class="score-card upcoming"><div class="score-meta"><span>[UPCOMING] ${sp}</span><span>${t}</span></div>
+        <div class="score-team"><span class="score-name">${g.away_team}</span><span style="color:#1e4a1e;font-size:10px;">AWAY</span></div>
+        <div style="border-top:1px solid #0a1a0a;margin:4px 0;"></div>
+        <div class="score-team"><span class="score-name">${g.home_team}</span><span style="color:#1e4a1e;font-size:10px;">HOME</span></div></div>`;
+    }
+    const aScore=g.scores?.find(s=>s.name===g.away_team)?.score||'0';
+    const hScore=g.scores?.find(s=>s.name===g.home_team)?.score||'0';
+    const aWin=parseInt(aScore)>parseInt(hScore);
+    const hWin=parseInt(hScore)>parseInt(aScore);
+    const status=g.completed?'FINAL':'LIVE';
+    const stCol=g.completed?'#1e4a1e':'#cc3333';
+    return `<div class="score-card ${g.completed?'final':'live'}">
+      <div class="score-meta"><span style="color:${stCol}">[${status}]</span><span>${sp} · ${t}</span></div>
+      <div class="score-team"><span class="score-name">${g.away_team}</span><span class="score-num ${aWin?'':'losing'}">${aScore}</span></div>
+      <div style="border-top:1px solid #0a1a0a;margin:4px 0;"></div>
+      <div class="score-team"><span class="score-name">${g.home_team}</span><span class="score-num ${hWin?'':'losing'}">${hScore}</span></div>
+    </div>`;
+  }).join('')}</div>`;
+}
+function renderAll(){
+  renderCards(allGames,'panel-all');
+  ['nba','nfl','mlb','nhl'].forEach(sh=>renderCards(allGames.filter(g=>g._sh===sh),`panel-${sh}`));
+  renderCards(allGames.filter(g=>g._sh==='epl'||g._sh==='mls'),'panel-soccer');
+}
+function toggleAuto(){
+  autoRef=!autoRef;
+  const btn=document.getElementById('auto-btn');
+  const badge=document.getElementById('auto-badge');
+  if(autoRef){btn.textContent='STOP';badge.textContent='AUTO 30s';badge.style.color='#00cc33';autoTimer=setInterval(loadAll,30000);}
+  else{btn.textContent='AUTO';badge.textContent='MANUAL';badge.style.color='#1e4a1e';clearInterval(autoTimer);}
+}
+function sbLog(msg){
+  const el=document.getElementById('sb-log');
+  const d=document.createElement('div');d.className='psb-log';
+  d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;
+  el.prepend(d);if(el.children.length>8)el.lastChild.remove();
+}
+async function sbStatus(){
+  try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';document.getElementById('sb-espn').className='psb-ok';document.getElementById('sb-espn').textContent='FREE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}
+}
+sbStatus();loadAll();
+</script>
+</body>
+</html>

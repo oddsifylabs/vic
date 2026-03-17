@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Settings</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">SETTINGS</div><div class="page-hdr-sub">API keys · preferences · system tests · data management</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn" onclick="saveAllSettings()">SAVE ALL</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-oddskey" style="color:#cc3333;">—</div><div class="tkl">ODDS API</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-claudekey" style="color:#cc3333;">—</div><div class="tkl">CLAUDE API</div></div>
+    <div class="t-kpi-cell"><div class="tkv" style="color:#00ff41;">FREE</div><div class="tkl">ESPN API</div></div>
+    <div class="t-kpi-cell"><div class="tkv" style="color:#00ff41;">FREE</div><div class="tkl">SAO SCRAPER</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchTab('keys',this)">API KEYS</button>
+      <button class="page-tab" onclick="switchTab('prefs',this)">PREFERENCES</button>
+      <button class="page-tab" onclick="switchTab('tests',this)">SYSTEM TESTS</button>
+      <button class="page-tab" onclick="switchTab('data',this)">DATA</button>
+    </div>
+    <div class="page-body" id="cfg-body">
+      <div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading configuration...</span></div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">VERSION</span><span class="psb-ok">v3</span></div>
+    <div class="psb-sec" style="margin-top:10px;">API DOCS</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;padding:4px;line-height:1.9;">
+      <div>Odds API:</div><div style="color:#1e4a1e;">the-odds-api.com</div>
+      <div style="margin-top:4px;">Claude API:</div><div style="color:#1e4a1e;">console.anthropic.com</div>
+    </div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="config.html">SETTINGS</a>
+    <a class="psb-quicklink" href="logs.html">LOGS</a>
+    <a class="psb-quicklink" href="index.html">HOME</a>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('config');
+checkServerStatus();
+let currentCfgTab='keys';
+async function switchTab(name,el){
+  currentCfgTab=name;document.querySelectorAll('.page-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  if(name==='keys')await renderKeys();
+  else if(name==='prefs')await renderPrefs();
+  else if(name==='tests')renderTests();
+  else if(name==='data')renderData();
+}
+async function renderKeys(){
+  const cfg=await getConfig();
+  document.getElementById('k-oddskey').textContent=cfg.oddsKey?'SET':'NOT SET';document.getElementById('k-oddskey').style.color=cfg.oddsKey?'#00ff41':'#cc3333';
+  document.getElementById('k-claudekey').textContent=cfg.claudeKey?'SET':'NOT SET';document.getElementById('k-claudekey').style.color=cfg.claudeKey?'#00ff41':'#cc3333';
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="max-width:580px;">
+      <div class="t-sec"><span>// API KEYS</span></div>
+      <div class="t-form-row" style="margin-bottom:14px;">
+        <div class="t-label">The Odds API Key <span style="color:#1e4a1e;">(odds · props · scores)</span></div>
+        <input type="password" class="t-input" id="odds-key" value="${cfg.oddsKey||''}" placeholder="sk_live_••••••••••••••••">
+        <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">the-odds-api.com · 500 free requests/month</div>
+      </div>
+      <div class="t-form-row" style="margin-bottom:16px;">
+        <div class="t-label">Claude API Key <span style="color:#1e4a1e;">(AI analysis · Legs model · Ask VIC)</span></div>
+        <input type="password" class="t-input" id="claude-key" value="${cfg.claudeKey||''}" placeholder="sk-ant-api03-••••••••••••••••">
+        <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">console.anthropic.com · pay-as-you-go</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="t-btn" onclick="saveKeys()">SAVE KEYS</button>
+        <button class="t-btn-ghost" onclick="testKeys()">TEST KEYS</button>
+      </div>
+      <div id="key-status" style="margin-top:10px;"></div>
+      <div class="t-sec" style="margin-top:20px;"><span>// KEY STATUS</span></div>
+      <div class="tl"><span class="td">ODDS API</span><span style="color:${cfg.oddsKey?'#00ff41':'#cc3333'};">${cfg.oddsKey?'[CONFIGURED]':'[NOT SET]'}</span></div>
+      <div class="tl"><span class="td">CLAUDE API</span><span style="color:${cfg.claudeKey?'#00ff41':'#cc3333'};">${cfg.claudeKey?'[CONFIGURED]':'[NOT SET]'}</span></div>
+      <div class="tl"><span class="td">ESPN API</span><span style="color:#00ff41;">[FREE — NO KEY NEEDED]</span></div>
+      <div class="tl"><span class="td">SAO SCRAPER</span><span style="color:#00ff41;">[FREE — NO KEY NEEDED]</span></div>
+      <div class="tl"><span class="td">OPEN-METEO</span><span style="color:#00ff41;">[FREE — NO KEY NEEDED]</span></div>
+    </div>`;
+}
+async function renderPrefs(){
+  const cfg=await getConfig();
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="max-width:480px;">
+      <div class="t-sec"><span>// PREFERENCES</span></div>
+      <div class="t-form-row" style="margin-bottom:12px;"><div class="t-label">Default Sportsbook</div>
+        <select class="t-select" id="default-book" style="width:100%;">
+          <option value="hardrockbet" ${cfg.defaultBook==='hardrockbet'||!cfg.defaultBook?'selected':''}>🎸 Hard Rock Bet</option>
+          <option value="fanduel" ${cfg.defaultBook==='fanduel'?'selected':''}>FanDuel</option>
+          <option value="draftkings" ${cfg.defaultBook==='draftkings'?'selected':''}>DraftKings</option>
+          <option value="betmgm" ${cfg.defaultBook==='betmgm'?'selected':''}>BetMGM</option>
+        </select>
+      </div>
+      <div class="t-form-row" style="margin-bottom:12px;"><div class="t-label">Odds Region</div>
+        <select class="t-select" id="odds-region" style="width:100%;">
+          <option value="us2" ${cfg.oddsRegion==='us2'||!cfg.oddsRegion?'selected':''}>US2 (Hard Rock, PointsBet)</option>
+          <option value="us" ${cfg.oddsRegion==='us'?'selected':''}>US (FanDuel, DraftKings, BetMGM)</option>
+        </select>
+      </div>
+      <div class="t-form-row" style="margin-bottom:16px;"><div class="t-label">Unit Size ($)</div>
+        <input type="number" class="t-input" id="unit-size" value="${cfg.unitSize||100}" min="1" style="width:120px;">
+      </div>
+      <button class="t-btn" onclick="savePrefs()">SAVE PREFERENCES</button>
+      <div id="prefs-status" style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;"></div>
+    </div>`;
+}
+function renderTests(){
+  document.getElementById('cfg-body').innerHTML=`
+    <div class="t-sec"><span>// SYSTEM DIAGNOSTICS</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${[['test-proxy','PROXY SERVER','Check proxy is running','testProxy()'],
+         ['test-odds','ODDS API','Validate key + fetch sports','testOdds()'],
+         ['test-claude','CLAUDE API','Send test prompt','testClaude()'],
+         ['test-espn','ESPN API','Fetch scoreboard (free)','testESPN()'],
+         ['test-sao','SAO SCRAPER','Scrape SAO data','testSAO()'],
+         ['test-weather','WEATHER API','Open-Meteo test (free)','testWeather()'],
+      ].map(([id,label,desc,fn])=>`<div style="background:#050b05;border:1px solid #0f2010;padding:10px 12px;border-radius:2px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#00cc33;font-weight:700;">${label}</span>
+          <button class="t-btn-ghost" style="padding:3px 10px;font-size:9px;" onclick="${fn}">TEST</button>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-bottom:5px;">${desc}</div>
+        <div id="${id}" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">—</div>
+      </div>`).join('')}
+    </div>
+    <div style="margin-top:12px;"><button class="t-btn" onclick="testAll()">RUN ALL TESTS</button></div>`;
+}
+function renderData(){
+  document.getElementById('cfg-body').innerHTML=`
+    <div class="t-sec"><span>// DATA MANAGEMENT</span></div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${[['BET HISTORY','All logged bets · data/bets.json','exportBets()','clearBets()'],
+         ['CLV DATA','Closing line values · data/clv.json',null,'clearCLV()'],
+         ['API CACHE','Cached responses · auto-expires',null,'clearCache()'],
+         ['SCAN HISTORY','Previous Legs scans · localStorage',null,'clearScans()'],
+      ].map(([label,desc,exportFn,clearFn])=>`<div style="background:#050b05;border:1px solid #0f2010;padding:10px 12px;border-radius:2px;display:flex;justify-content:space-between;align-items:center;">
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#00cc33;font-weight:700;">${label}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-top:2px;">${desc}</div></div>
+        <div style="display:flex;gap:6px;">
+          ${exportFn?`<button class="t-btn-ghost" style="padding:3px 10px;font-size:9px;" onclick="${exportFn}">EXPORT</button>`:''}
+          <button class="t-btn-ghost" style="padding:3px 10px;font-size:9px;color:#cc3333;" onclick="${clearFn}">CLEAR</button>
+        </div>
+      </div>`).join('')}
+    </div>
+    <div id="data-status" style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;"></div>`;
+}
+async function saveKeys(){
+  const cfg=await getConfig();
+  cfg.oddsKey=document.getElementById('odds-key')?.value.trim()||cfg.oddsKey;
+  cfg.claudeKey=document.getElementById('claude-key')?.value.trim()||cfg.claudeKey;
+  await saveConfig(cfg);
+  const st=document.getElementById('key-status');if(st)st.innerHTML='<div class="tl"><span class="tg">[OK]</span><span>keys saved</span></div>';
+  document.getElementById('k-oddskey').textContent=cfg.oddsKey?'SET':'NOT SET';document.getElementById('k-oddskey').style.color=cfg.oddsKey?'#00ff41':'#cc3333';
+  document.getElementById('k-claudekey').textContent=cfg.claudeKey?'SET':'NOT SET';document.getElementById('k-claudekey').style.color=cfg.claudeKey?'#00ff41':'#cc3333';
+}
+async function savePrefs(){
+  const cfg=await getConfig();
+  cfg.defaultBook=document.getElementById('default-book')?.value||cfg.defaultBook;
+  cfg.oddsRegion=document.getElementById('odds-region')?.value||cfg.oddsRegion;
+  cfg.unitSize=parseInt(document.getElementById('unit-size')?.value)||cfg.unitSize;
+  await saveConfig(cfg);const st=document.getElementById('prefs-status');if(st)st.textContent='[OK] preferences saved';
+}
+async function saveAllSettings(){await saveKeys().catch(()=>{});await savePrefs().catch(()=>{});}
+function setTR(id,ok,msg){const el=document.getElementById(id);if(el){el.textContent=msg;el.style.color=ok?'#00ff41':msg.includes('WN')?'#aa9900':'#cc3333';}}
+async function testProxy(){try{const r=await fetch(`${API}/api/config`);setTR('test-proxy',r.ok,r.ok?'[OK] proxy online':'[ER] error');}catch(e){setTR('test-proxy',false,'[ER] cannot reach proxy');}}
+async function testOdds(){setTR('test-odds',true,'[..] testing...');try{const data=await proxyOdds('sports/',{});setTR('test-odds',true,`[OK] ${data?.length||0} sports`);}catch(e){setTR('test-odds',false,'[ER] '+e.message);}}
+async function testClaude(){setTR('test-claude',true,'[..] testing...');try{const t=await quickSummary('Reply with exactly: OK',30);setTR('test-claude',t.includes('OK'),'[OK] Claude responding');}catch(e){setTR('test-claude',false,'[ER] '+e.message);}}
+async function testESPN(){try{const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');const d=await r.json();setTR('test-espn',r.ok,r.ok?`[OK] ${d.events?.length||0} games`:'[ER] ESPN error');}catch(e){setTR('test-espn',false,'[ER] '+e.message);}}
+async function testSAO(){setTR('test-sao',true,'[..] testing...');try{const r=await fetch(`${API}/api/sao/test`);const text=await r.text();let d={ok:false,message:'no response'};try{d=JSON.parse(text);}catch(e){if(text.includes('<!DOCTYPE')){setTR('test-sao',false,'[ER] proxy returned HTML — restart VIC');return;}}setTR('test-sao',d.ok,d.ok?'[OK] SAO reachable':'[WN] '+d.message);}catch(e){setTR('test-sao',false,'[ER] '+e.message);}}
+async function testWeather(){try{const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m');setTR('test-weather',r.ok,r.ok?'[OK] Open-Meteo responding':'[ER] weather error');}catch(e){setTR('test-weather',false,'[ER] '+e.message);}}
+async function testKeys(){setTR('test-odds',true,'[..] ...');setTR('test-claude',true,'[..] ...');await Promise.all([testOdds(),testClaude()]);}
+async function testAll(){await Promise.all([testProxy(),testOdds(),testClaude(),testESPN(),testSAO(),testWeather()]);}
+async function exportBets(){const bets=await getBets();if(!bets.length){document.getElementById('data-status').textContent='[WN] no bets';return;}const csv=[['Date','Bet','Sport','Book','Odds','Units','Result','P/L'],...bets.map(b=>[b.date||'',b.bet||'',b.sport||'',b.book||'',b.odds||'',b.units||1,b.result||'',(b.profit||0).toFixed(2)])].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='vic_bets.csv';a.click();document.getElementById('data-status').textContent='[OK] exported';}
+async function clearBets(){if(!confirm('Delete ALL bet history?'))return;await fetch(`${API}/api/bets`,{method:'DELETE'}).catch(()=>{});document.getElementById('data-status').textContent='[OK] bet history cleared';}
+async function clearCLV(){if(!confirm('Delete all CLV data?'))return;await fetch(`${API}/api/clv`,{method:'DELETE'}).catch(()=>{});document.getElementById('data-status').textContent='[OK] CLV cleared';}
+async function clearCache(){await fetch(`${API}/api/scrape/cache`,{method:'DELETE'}).catch(()=>{});document.getElementById('data-status').textContent='[OK] cache cleared';}
+function clearScans(){if(!confirm('Clear scan history?'))return;localStorage.removeItem('vic_scans');document.getElementById('data-status').textContent='[OK] scans cleared';}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();renderKeys();
+</script>
+</body>
+</html>

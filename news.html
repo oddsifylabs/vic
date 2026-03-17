@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Intelligence</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.news-item{padding:10px 0;border-bottom:1px solid #0a1a0a;}
+.news-item:last-child{border-bottom:none;}
+.news-hl{font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6;}
+.news-hl.impact{color:#cc3333;}.news-hl.normal{color:#00cc33;}
+.news-thumb{width:100%;height:80px;object-fit:cover;border-radius:2px;margin-bottom:6px;border:1px solid #0f2010;}
+.news-meta{font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-top:3px;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">INTELLIGENCE FEED</div><div class="page-hdr-sub">ESPN API · live scores · standings · leaders · AI digest</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="aiDigest()">AI DIGEST</button>
+      <button class="t-btn" onclick="loadAll()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-news">—</div><div class="tkl">STORIES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-impact" style="color:#cc3333;">—</div><div class="tkl">IMPACT</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-games">—</div><div class="tkl">LIVE GAMES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-ts">—</div><div class="tkl">UPDATED</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchPageTab('news',this)">NEWS</button>
+      <button class="page-tab" onclick="switchPageTab('scores',this);renderScores()">SCORES</button>
+      <button class="page-tab" onclick="switchPageTab('standings',this);renderStandings()">STANDINGS</button>
+      <button class="page-tab" onclick="switchPageTab('leaders',this);renderLeaders()">LEADERS</button>
+      <button class="page-tab" onclick="switchPageTab('digest',this)">AI DIGEST</button>
+    </div>
+    <div class="page-body">
+      <div class="page-panel active" id="panel-news"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading news...</span></div></div>
+      <div class="page-panel" id="panel-scores"></div>
+      <div class="page-panel" id="panel-standings"></div>
+      <div class="page-panel" id="panel-leaders"></div>
+      <div class="page-panel" id="panel-digest"><div class="tl"><span class="td">VIC&gt;</span><span class="ta">click AI DIGEST to generate briefing</span></div></div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">ESPN</span><span class="psb-ok">FREE</span></div>
+    <div class="psb-sec" style="margin-top:10px;">SPORT FILTER</div>
+    <div style="display:flex;flex-wrap:wrap;gap:3px;padding:4px 0;">
+      <button class="t-f-btn active" onclick="setNewsSport('all',this)">ALL</button>
+      <button class="t-f-btn" onclick="setNewsSport('nba',this)">NBA</button>
+      <button class="t-f-btn" onclick="setNewsSport('nfl',this)">NFL</button>
+      <button class="t-f-btn" onclick="setNewsSport('mlb',this)">MLB</button>
+      <button class="t-f-btn" onclick="setNewsSport('nhl',this)">NHL</button>
+    </div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="news.html">INTEL</a>
+    <a class="psb-quicklink" href="injuries.html">INJURIES</a>
+    <a class="psb-quicklink" href="analysis.html">ANALYSIS</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('news');
+checkServerStatus();
+function switchPageTab(name, el) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + name);
+  if (panel) panel.classList.add('active');
+}
+const IMPACT_KW=['out','injured','questionable','doubtful','suspended','ruled out','scratch'];
+let newsItems=[],scoresData={},standingsData={},leadersData={},newsSport='all';
+loadAll();
+function setNewsSport(s,el){newsSport=s;document.querySelectorAll('.t-f-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderNews();}
+async function loadAll(){
+  await Promise.all([loadNews(),loadScoreData(),loadStandingsData(),loadLeadersData()]);
+  document.getElementById('k-ts').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+}
+async function loadNews(){
+  try{const r=await fetch(`${API}/api/news-all`);const d=await r.json();newsItems=d.items||[];
+    const impact=newsItems.filter(i=>IMPACT_KW.some(k=>(i.headline||'').toLowerCase().includes(k))).length;
+    document.getElementById('k-news').textContent=newsItems.length;document.getElementById('k-impact').textContent=impact;
+    renderNews();sbLog(`${newsItems.length} stories`,'ok');
+  }catch(e){sbLog('news failed','err');}
+}
+async function loadScoreData(){
+  for(const sp of ['nba','nfl','mlb','nhl']){try{const r=await fetch(`${API}/api/espn/scores/${sp}`);if(r.ok){const d=await r.json();scoresData[sp]=d.games||[];}}catch(e){}}
+  document.getElementById('k-games').textContent=Object.values(scoresData).flat().filter(g=>g.scores&&!g.completed).length||'—';
+}
+async function loadStandingsData(){for(const sp of ['nba','nfl','mlb','nhl']){try{const r=await fetch(`${API}/api/espn/standings/${sp}`);if(r.ok){const d=await r.json();standingsData[sp]=d;}}catch(e){}}}
+async function loadLeadersData(){for(const sp of ['nba','nfl','mlb','nhl']){try{const r=await fetch(`${API}/api/espn/leaders/${sp}`);if(r.ok){const d=await r.json();leadersData[sp]=d;}}catch(e){}}}
+function renderNews(){
+  const el=document.getElementById('panel-news');
+  let items=newsSport==='all'?newsItems:newsItems.filter(i=>i.sport===newsSport||i.sport?.includes(newsSport));
+  if(!items.length){el.innerHTML='<div class="tl"><span class="tm">no news</span></div>';return;}
+  el.innerHTML=items.slice(0,20).map(item=>{
+    const hot=IMPACT_KW.some(k=>(item.headline||'').toLowerCase().includes(k));
+    const prefix=hot?`<span class="tr">[!!]</span>`:`<span class="td">[--]</span>`;
+    const sp=item.sport?` <span class="td">${item.sport.toUpperCase()}</span>`:'';
+    return `<div class="news-item">
+      ${item.thumbnail?`<img src="${item.thumbnail}" class="news-thumb" onerror="this.style.display='none'">`:''}
+      <div class="tl" style="border:none;padding:0;">${prefix}<span class="news-hl ${hot?'impact':'normal'}" style="flex:1;">${item.headline||''}</span>${sp}</div>
+      <div class="news-meta">${item.published||''}</div>
+    </div>`;
+  }).join('');
+}
+function renderScores(){
+  const el=document.getElementById('panel-scores');let html='';
+  for(const[sp,games] of Object.entries(scoresData)){
+    if(!games.length)continue;
+    html+=`<div class="t-sec" style="margin-top:10px;"><span>// ${sp.toUpperCase()}</span></div>`;
+    html+=games.slice(0,8).map(g=>{
+      const time=new Date(g.commence_time||g.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+      const aScore=g.scores?.find(s=>s.name===g.away_team)?.score||'';
+      const hScore=g.scores?.find(s=>s.name===g.home_team)?.score||'';
+      const status=g.completed?'FINAL':g.scores?'LIVE':'';
+      return `<div class="tl"><span class="td">${time}</span><span class="tb" style="flex:1;">${shortTeamName(g.away_team||'')} @ ${shortTeamName(g.home_team||'')}</span>${aScore?`<span class="ty">${aScore}-${hScore}</span>`:''} ${status?`<span style="color:${status==='LIVE'?'#cc3333':'#1e4a1e'};font-size:9px;">[${status}]</span>`:''}</div>`;
+    }).join('');
+  }
+  el.innerHTML=html||'<div class="tl"><span class="tm">no scores</span></div>';
+}
+function renderStandings(){
+  const el=document.getElementById('panel-standings');let html='';
+  for(const[sp,data] of Object.entries(standingsData)){
+    if(!data.standings?.length)continue;
+    html+=`<div class="t-sec" style="margin-top:10px;"><span>// ${sp.toUpperCase()}</span></div>`;
+    data.standings.slice(0,1).forEach(div=>{div.teams?.slice(0,8).forEach((t,i)=>{html+=`<div class="tl"><span class="td" style="min-width:22px;">${i+1}</span><span class="tb" style="flex:1;">${t.name||'?'}</span><span class="tg">${t.wins||0}-${t.losses||0}</span>${t.pct?`<span class="td">${t.pct}</span>`:''}</div>`;});});
+  }
+  el.innerHTML=html||'<div class="tl"><span class="tm">no standings</span></div>';
+}
+function renderLeaders(){
+  const el=document.getElementById('panel-leaders');let html='';
+  for(const[sp,data] of Object.entries(leadersData)){
+    if(!data.categories?.length)continue;
+    html+=`<div class="t-sec" style="margin-top:10px;"><span>// ${sp.toUpperCase()} LEADERS</span></div>`;
+    data.categories.slice(0,3).forEach(cat=>{
+      html+=`<div class="tl" style="margin-top:4px;"><span style="color:#2a6a2a;font-size:9px;letter-spacing:1px;">${cat.name||'?'}</span></div>`;
+      (cat.leaders||[]).slice(0,5).forEach((l,i)=>{html+=`<div class="tl"><span class="td">${i+1}</span><span class="tb" style="flex:1;">${l.athlete?.displayName||l.name||'?'}</span><span class="ty" style="font-weight:700;">${l.value||l.displayValue||'?'}</span></div>`;});
+    });
+  }
+  el.innerHTML=html||'<div class="tl"><span class="tm">no leaders data</span></div>';
+}
+async function aiDigest(){
+  document.querySelectorAll('.page-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.page-tab')[4]?.classList.add('active');
+  document.querySelectorAll('.page-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-digest').classList.add('active');
+  const el=document.getElementById('panel-digest');
+  el.innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">generating intelligence digest with web search...</span></div>';
+  const headlines=newsItems.slice(0,15).map(i=>i.headline).join('\n');
+  try{
+    const text=await proxyClaudeWithSearch(`Sharp sports betting analyst. Analyze headlines, identify top 3 betting implications today.\n\nHEADLINES:\n${headlines||'No headlines.'}\n\n1. Top injury impacts\n2. Key line movement stories\n3. Best intelligence-driven angle\n\nBe specific and brief.`,1000);
+    el.innerHTML=text.split('\n').filter(l=>l.trim()).map(l=>`<div class="tl"><span class="td">VIC&gt;</span><span style="color:#2a8a2a;">${l}</span></div>`).join('')+`<div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+  }catch(e){el.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;}
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

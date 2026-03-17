@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — System Logs</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.log-tbl{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.log-tbl th{padding:6px 10px;text-align:left;color:#2a6a2a;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid #0f2010;position:sticky;top:0;background:#080e08;white-space:nowrap;z-index:2;}
+.log-tbl td{padding:5px 10px;border-bottom:1px solid #060c06;vertical-align:top;max-width:0;}
+.log-tbl tr:hover td{background:#060c06;}
+.lv-info{color:#2a8a2a;font-weight:700;}
+.lv-warn{color:#aa9900;font-weight:700;}
+.lv-error{color:#cc3333;font-weight:700;}
+.ls-pill{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.5px;padding:1px 6px;border-radius:2px;white-space:nowrap;display:inline-block;}
+.ls-HTTP{color:#2a6a2a;border:1px solid #0f2010;background:#030803;}
+.ls-ClaudeAPI{color:#00cc66;border:1px solid #003322;background:#001208;}
+.ls-OddsAPI{color:#aacc00;border:1px solid #2a3300;background:#080900;}
+.ls-Scraper{color:#00aacc;border:1px solid #002233;background:#000c12;}
+.ls-Weather{color:#6699cc;border:1px solid #112233;background:#080a12;}
+.ls-System{color:#00ff41;border:1px solid #003300;background:#010800;}
+.ls-ESPN{color:#cc4444;border:1px solid #330000;background:#120000;}
+.ls-PublicBetting{color:#aa66cc;border:1px solid #221133;background:#0a0512;}
+.ls-default{color:#2a6a2a;border:1px solid #0f2010;}
+
+/* Toggle switch */
+.tog-wrap{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;}
+.tog-track{width:40px;height:22px;background:#0a1a0a;border:1px solid #1a3a1a;border-radius:11px;position:relative;transition:all .2s;flex-shrink:0;}
+.tog-track.on{background:#003800;border-color:#00aa22;}
+.tog-thumb{width:16px;height:16px;background:#1e4a1e;border-radius:50%;position:absolute;top:2px;left:2px;transition:all .2s;}
+.tog-track.on .tog-thumb{left:20px;background:#00ff41;}
+.tog-label{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1px;min-width:28px;}
+
+/* Detail overlay */
+.detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;display:flex;align-items:center;justify-content:center;}
+.detail-box{background:#050b05;border:1px solid #00ff41;width:560px;max-width:95vw;border-radius:2px;overflow:hidden;max-height:85vh;display:flex;flex-direction:column;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+
+  <!-- Header -->
+  <div class="page-hdr">
+    <div class="page-hdr-brand">
+      <div>
+        <div class="page-hdr-title">SYSTEM LOGS</div>
+        <div class="page-hdr-sub" id="log-sub">VIC event log · API calls · errors · scraper activity</div>
+      </div>
+    </div>
+    <div class="page-hdr-actions">
+      <!-- Toggle -->
+      <div class="tog-wrap" onclick="toggleLogging()" title="Enable or disable logging">
+        <div class="tog-track" id="tog-track"><div class="tog-thumb"></div></div>
+        <span class="tog-label" id="tog-label" style="color:#1e4a1e;">—</span>
+      </div>
+      <button class="t-btn-ghost" onclick="testLog()" style="font-size:9px;padding:3px 10px;">TEST</button>
+      <button class="t-btn-ghost" onclick="showExport()">EXPORT ▾</button>
+      <button class="t-btn-ghost" onclick="showClear()" style="color:#cc3333;">CLEAR ▾</button>
+      <button class="t-btn" onclick="refresh()">↺ REFRESH</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-total">—</div><div class="tkl">TOTAL</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-errors" style="color:#cc3333;">—</div><div class="tkl">ERRORS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-warns" style="color:#aa9900;">—</div><div class="tkl">WARNINGS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-age">—</div><div class="tkl">OLDEST</div><div class="tks" id="k-age-ts"></div></div>
+  </div>
+
+  <!-- Main -->
+  <div class="page-main">
+
+    <!-- Filter bar -->
+    <div style="display:flex;align-items:center;gap:6px;padding:7px 14px;border-bottom:1px solid #0f2010;flex-shrink:0;flex-wrap:wrap;background:#050b05;">
+      <button class="page-tab active" id="lf-all"   onclick="setLevel('all',this)"  >ALL</button>
+      <button class="page-tab"        id="lf-error" onclick="setLevel('error',this)" style="color:#cc3333;">ERRORS</button>
+      <button class="page-tab"        id="lf-warn"  onclick="setLevel('warn',this)"  style="color:#aa9900;">WARNINGS</button>
+      <button class="page-tab"        id="lf-info"  onclick="setLevel('info',this)"  >INFO</button>
+      <div class="tnav-divider" style="height:20px;"></div>
+      <select class="t-select" id="f-source" onchange="refresh()" style="font-size:9px;padding:3px 8px;">
+        <option value="all">ALL SOURCES</option>
+        <option value="HTTP">HTTP</option>
+        <option value="ClaudeAPI">CLAUDE API</option>
+        <option value="OddsAPI">ODDS API</option>
+        <option value="Scraper">SCRAPER</option>
+        <option value="ESPN">ESPN</option>
+        <option value="Weather">WEATHER</option>
+        <option value="System">SYSTEM</option>
+        <option value="PublicBetting">PUBLIC BETTING</option>
+      </select>
+      <input type="text" class="t-input" id="f-search" placeholder="search…" oninput="refresh()" style="width:160px;font-size:10px;padding:3px 8px;">
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:4px;">
+        <input type="checkbox" id="auto-cb" onchange="toggleAuto()" style="accent-color:#00ff41;">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;">AUTO 5s</span>
+      </label>
+      <span id="f-count" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;margin-left:auto;"></span>
+    </div>
+
+    <!-- Log table -->
+    <div class="page-body" id="log-body" style="padding:0;">
+      <div class="tl" style="padding:12px 16px;"><span class="td">SYS&gt;</span><span class="ta">loading logs...</span></div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">LOGGING</span><span id="sb-logging" class="psb-val">—</span></div>
+
+    <div class="psb-sec" style="margin-top:10px;">CLEAR BY SOURCE</div>
+    <div id="src-clear"></div>
+
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="logs.html">LOGS</a>
+    <a class="psb-quicklink" href="config.html">SETTINGS</a>
+    <a class="psb-quicklink" href="index.html">HOME</a>
+
+    <div class="psb-sec" style="margin-top:10px;">ACTIVITY</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+
+</div><!-- /page-shell -->
+</div><!-- /main -->
+
+<!-- Export dropdown -->
+<div id="export-dd" style="display:none;position:fixed;background:#050b05;border:1px solid #00ff41;border-radius:2px;z-index:500;min-width:150px;">
+  <div onclick="doExport('json')" class="dd-item">EXPORT JSON</div>
+  <div onclick="doExport('csv')"  class="dd-item">EXPORT CSV</div>
+  <div onclick="doExport('txt')"  class="dd-item">EXPORT TXT</div>
+</div>
+<!-- Clear dropdown -->
+<div id="clear-dd" style="display:none;position:fixed;background:#050b05;border:1px solid #cc3333;border-radius:2px;z-index:500;min-width:180px;">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#cc3333;padding:5px 14px;border-bottom:1px solid #0f2010;letter-spacing:1px;">CLEAR LOGS</div>
+  <div onclick="doClear('all')"   class="dd-item" style="color:#cc3333;">ALL LOGS</div>
+  <div onclick="doClear('error')" class="dd-item" style="color:#cc3333;">ERRORS ONLY</div>
+  <div onclick="doClear('warn')"  class="dd-item" style="color:#aa9900;">WARNINGS ONLY</div>
+  <div onclick="doClear('info')"  class="dd-item">INFO ONLY</div>
+</div>
+
+<style>
+.dd-item{font-family:'JetBrains Mono',monospace;font-size:10px;color:#00cc33;padding:8px 14px;cursor:pointer;border-bottom:1px solid #0a1a0a;}
+.dd-item:last-child{border-bottom:none;}
+.dd-item:hover{background:#0a180a;}
+</style>
+
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('logs');
+
+let allLogs = [];
+let level   = 'all';
+let logEnabled = true;
+let autoTimer  = null;
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  // 1. Check proxy
+  try {
+    await fetch(`${API}/api/config`);
+    setSbProxy(true);
+  } catch(e) {
+    setSbProxy(false);
+    setBody('<div class="tl" style="padding:14px 16px;"><span class="tr">[OFFLINE]</span><span style="color:#cc3333;"> VIC proxy is not running — start with start.ps1 or bash start.sh</span></div>');
+    return;
+  }
+  // 2. Get logging state
+  await loadEnabled();
+  // 3. Load logs + stats
+  await Promise.all([loadStats(), refresh()]);
+  // 4. Build source clear list
+  buildSrcClear();
+}
+
+// ── Logging toggle ────────────────────────────────────────────────────────────
+async function loadEnabled() {
+  try {
+    const r = await fetch(`${API}/api/logs/enabled`);
+    const d = await r.json();
+    logEnabled = d.enabled;
+    renderToggle();
+  } catch(e) {}
+}
+
+function renderToggle() {
+  const track = document.getElementById('tog-track');
+  const label = document.getElementById('tog-label');
+  const sbEl  = document.getElementById('sb-logging');
+  const sub   = document.getElementById('log-sub');
+  if (track) { track.classList.toggle('on', logEnabled); }
+  if (label) { label.textContent = logEnabled ? 'ON' : 'OFF'; label.style.color = logEnabled ? '#00ff41' : '#cc3333'; }
+  if (sbEl)  { sbEl.textContent = logEnabled ? 'ENABLED' : 'DISABLED'; sbEl.className = logEnabled ? 'psb-ok' : 'psb-warn'; }
+  if (sub)   { sub.textContent = logEnabled
+    ? 'VIC event log · API calls · errors · scraper activity · ● LOGGING ON'
+    : 'VIC event log · API calls · errors · scraper activity · ○ LOGGING PAUSED'; }
+}
+
+async function toggleLogging() {
+  // Optimistic UI
+  logEnabled = !logEnabled;
+  renderToggle();
+  sbLog(logEnabled ? 'Enabling logging…' : 'Disabling logging…');
+  try {
+    const r = await fetch(`${API}/api/logs/enabled`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: logEnabled })
+    });
+    const d = await r.json();
+    logEnabled = d.enabled;     // confirmed from server
+    renderToggle();
+    sbLog(logEnabled ? 'Logging ON' : 'Logging OFF', logEnabled ? 'ok' : 'warn');
+  } catch(e) {
+    // Revert
+    logEnabled = !logEnabled;
+    renderToggle();
+    sbLog('Toggle failed — proxy offline?', 'err');
+  }
+}
+
+// ── Test log ──────────────────────────────────────────────────────────────────
+async function testLog() {
+  try {
+    // Trigger real API calls which generate log entries
+    await fetch(`${API}/api/config`);
+    await fetch(`${API}/api/bets`);
+    await fetch(`${API}/api/espn/scores/nba`);
+    sbLog('Test API calls fired — refreshing…', 'ok');
+    setTimeout(() => { loadStats(); refresh(); }, 600);
+  } catch(e) {
+    sbLog('Test failed: ' + e.message, 'err');
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/api/logs/stats`);
+    const d = await r.json();
+    document.getElementById('k-total').textContent  = d.total  || 0;
+    document.getElementById('k-errors').textContent = d.byLevel?.error || 0;
+    document.getElementById('k-warns').textContent  = d.byLevel?.warn  || 0;
+    if (d.oldest) {
+      const dt = new Date(d.oldest);
+      document.getElementById('k-age').textContent    = dt.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+      document.getElementById('k-age-ts').textContent = dt.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+    }
+  } catch(e) {}
+}
+
+// ── Load + render logs ────────────────────────────────────────────────────────
+async function refresh() {
+  const source = document.getElementById('f-source').value;
+  const search = document.getElementById('f-search').value.trim();
+  try {
+    const qs = new URLSearchParams({ limit: 500, level, source, search });
+    const r  = await fetch(`${API}/api/logs?${qs}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    allLogs = await r.json();
+    document.getElementById('f-count').textContent = `${allLogs.length} entries`;
+    renderTable();
+  } catch(e) {
+    setBody(`<div class="tl" style="padding:14px 16px;"><span class="tr">[ER]</span><span> ${e.message}</span></div>`);
+  }
+}
+
+function renderTable() {
+  if (!allLogs.length) {
+    const filtered = level !== 'all'
+      || document.getElementById('f-source').value !== 'all'
+      || document.getElementById('f-search').value.trim();
+    setBody(filtered
+      ? '<div class="tl" style="padding:14px 16px;"><span class="tm">no entries match filter</span></div>'
+      : `<div style="padding:24px 20px;text-align:center;">
+           <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#2a6a2a;margin-bottom:8px;">// NO LOGS YET</div>
+           <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;line-height:2;">
+             Logs are written each time VIC processes an API request.<br>
+             Click <strong style="color:#00ff41;">TEST</strong> above to generate some entries now,<br>
+             or browse to any page (Odds, Scores, Injuries).
+           </div>
+         </div>`
+    );
+    return;
+  }
+
+  const rows = allLogs.map(log => {
+    const ts      = new Date(log.ts);
+    const timeStr = ts.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+    const dateStr = ts.toLocaleDateString('en-US', { month:'2-digit', day:'2-digit' });
+    const lvCls   = `lv-${log.level}`;
+    const lvTag   = log.level === 'error' ? '[ER]' : log.level === 'warn' ? '[WN]' : '[--]';
+    const srcCls  = `ls-${(log.source||'').replace(/[^a-zA-Z]/g,'')}` ;
+    const detail  = (log.detail || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const msg     = (log.message || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<tr>
+      <td style="color:#1a3a1a;font-size:10px;white-space:nowrap;">${dateStr}<br>${timeStr}</td>
+      <td class="${lvCls}">${lvTag}</td>
+      <td><span class="ls-pill ${srcCls}">${log.source||'?'}</span></td>
+      <td style="color:#00cc33;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px;">${msg}</td>
+      <td style="color:#2a6a2a;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;cursor:${detail?'pointer':'default'};"
+          onclick="${detail ? `showDetail(${log.id})` : ''}"
+          title="${detail}">${detail ? `<span style="color:#1a4a1a;">[+]</span> ${detail}` : ''}</td>
+    </tr>`;
+  }).join('');
+
+  setBody(`<table class="log-tbl">
+    <thead><tr><th>TIME</th><th>LVL</th><th>SOURCE</th><th>MESSAGE</th><th>DETAIL</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`);
+}
+
+function setBody(html) {
+  document.getElementById('log-body').innerHTML = html;
+}
+
+// ── Level filter ──────────────────────────────────────────────────────────────
+function setLevel(lv, el) {
+  level = lv;
+  document.querySelectorAll('#lf-all,#lf-error,#lf-warn,#lf-info').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  refresh();
+}
+
+// ── Auto refresh ──────────────────────────────────────────────────────────────
+function toggleAuto() {
+  if (document.getElementById('auto-cb').checked) {
+    autoTimer = setInterval(() => { refresh(); loadStats(); }, 5000);
+    sbLog('Auto-refresh ON (5s)', 'ok');
+  } else {
+    clearInterval(autoTimer);
+    autoTimer = null;
+    sbLog('Auto-refresh OFF');
+  }
+}
+
+// ── Detail modal ──────────────────────────────────────────────────────────────
+async function showDetail(id) {
+  try {
+    const r   = await fetch(`${API}/api/logs/entry/${id}`);
+    const log = await r.json();
+    const lvCls = `lv-${log.level}`;
+    const srcCls = `ls-${(log.source||'').replace(/[^a-zA-Z]/g,'')}`;
+    const overlay = document.createElement('div');
+    overlay.className = 'detail-overlay';
+    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `
+      <div class="detail-box">
+        <div style="padding:9px 14px;border-bottom:1px solid #0f2010;display:flex;justify-content:space-between;align-items:center;background:#030903;flex-shrink:0;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#3a7a3a;letter-spacing:2px;">LOG DETAIL</span>
+          <button onclick="this.closest('.detail-overlay').remove()" style="background:none;border:1px solid #0f2010;color:#2a6a2a;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;padding:2px 8px;border-radius:2px;">✕ CLOSE</button>
+        </div>
+        <div style="padding:14px;overflow-y:auto;flex:1;">
+          <div class="tl"><span class="td" style="min-width:80px;">TIME</span><span style="color:#00cc33;">${new Date(log.ts).toLocaleString()}</span></div>
+          <div class="tl"><span class="td" style="min-width:80px;">LEVEL</span><span class="${lvCls}">${(log.level||'').toUpperCase()}</span></div>
+          <div class="tl"><span class="td" style="min-width:80px;">SOURCE</span><span class="ls-pill ${srcCls}">${log.source||'?'}</span></div>
+          <div class="tl"><span class="td" style="min-width:80px;">ID</span><span style="color:#1e4a1e;">${log.id}</span></div>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid #0f2010;">
+            <div class="t-label" style="margin-bottom:4px;">MESSAGE</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;line-height:1.7;word-break:break-all;">${(log.message||'—').replace(/</g,'&lt;')}</div>
+          </div>
+          ${log.detail ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #0f2010;">
+            <div class="t-label" style="margin-bottom:4px;">DETAIL</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#cc3333;line-height:1.7;word-break:break-all;white-space:pre-wrap;">${log.detail.replace(/</g,'&lt;')}</div>
+          </div>` : ''}
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid #0f2010;display:flex;gap:8px;">
+            <button class="t-btn-ghost" style="padding:4px 12px;font-size:9px;" onclick="copyText('${(log.message+' '+log.detail).replace(/'/g,'')}')">COPY</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  } catch(e) {}
+}
+
+function copyText(txt) {
+  navigator.clipboard?.writeText(txt).catch(() => {});
+  sbLog('Copied to clipboard', 'ok');
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+function showExport() {
+  const el = document.getElementById('export-dd');
+  const cl = document.getElementById('clear-dd');
+  cl.style.display = 'none';
+  const show = el.style.display === 'block';
+  el.style.display = show ? 'none' : 'block';
+  if (!show) {
+    const btn = event.target.closest('button').getBoundingClientRect();
+    el.style.top  = (btn.bottom + 4) + 'px';
+    el.style.right = (window.innerWidth - btn.right) + 'px';
+  }
+}
+
+function showClear() {
+  const el = document.getElementById('clear-dd');
+  const ex = document.getElementById('export-dd');
+  ex.style.display = 'none';
+  const show = el.style.display === 'block';
+  el.style.display = show ? 'none' : 'block';
+  if (!show) {
+    const btn = event.target.closest('button').getBoundingClientRect();
+    el.style.top  = (btn.bottom + 4) + 'px';
+    el.style.right = (window.innerWidth - btn.right) + 'px';
+  }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('[onclick*="showExport"],[onclick*="showClear"]')) {
+    document.getElementById('export-dd').style.display = 'none';
+    document.getElementById('clear-dd').style.display  = 'none';
+  }
+});
+
+function doExport(fmt) {
+  document.getElementById('export-dd').style.display = 'none';
+  if (!allLogs.length) { sbLog('No logs to export', 'warn'); return; }
+  const ts = new Date().toISOString().slice(0,16).replace(':','-');
+  let content, filename, type;
+  if (fmt === 'json') {
+    content  = JSON.stringify(allLogs, null, 2);
+    filename = `vic_logs_${ts}.json`;
+    type     = 'application/json';
+  } else if (fmt === 'csv') {
+    const rows = [['Timestamp','Level','Source','Message','Detail'],
+      ...allLogs.map(l => [l.ts,l.level,l.source,l.message,l.detail].map(v => `"${(v||'').replace(/"/g,"'")}"`)
+    )];
+    content  = rows.map(r => r.join(',')).join('\n');
+    filename = `vic_logs_${ts}.csv`;
+    type     = 'text/csv';
+  } else {
+    content  = allLogs.map(l => `[${l.ts}] [${(l.level||'').toUpperCase()}] [${l.source}] ${l.message}${l.detail?' | '+l.detail:''}`).join('\n');
+    filename = `vic_logs_${ts}.txt`;
+    type     = 'text/plain';
+  }
+  const a = document.createElement('a');
+  a.href     = `data:${type};charset=utf-8,` + encodeURIComponent(content);
+  a.download = filename;
+  a.click();
+  sbLog(`Exported ${allLogs.length} entries as ${fmt.toUpperCase()}`, 'ok');
+}
+
+async function doClear(what) {
+  document.getElementById('clear-dd').style.display = 'none';
+  if (!confirm(`Clear ${what === 'all' ? 'ALL' : what} logs?`)) return;
+  try {
+    const url = what === 'all' ? `${API}/api/logs` : `${API}/api/logs/level/${what}`;
+    await fetch(url, { method: 'DELETE' });
+    sbLog(`Cleared ${what} logs`, 'ok');
+    await loadStats();
+    await refresh();
+    buildSrcClear();
+  } catch(e) { sbLog('Clear failed: ' + e.message, 'err'); }
+}
+
+async function clearSource(src) {
+  if (!confirm(`Clear all ${src} logs?`)) return;
+  try {
+    await fetch(`${API}/api/logs/source/${encodeURIComponent(src)}`, { method: 'DELETE' });
+    sbLog(`Cleared ${src} logs`, 'ok');
+    await loadStats();
+    await refresh();
+    buildSrcClear();
+  } catch(e) { sbLog('Clear failed: ' + e.message, 'err'); }
+}
+
+// ── Source clear list ─────────────────────────────────────────────────────────
+async function buildSrcClear() {
+  try {
+    const r = await fetch(`${API}/api/logs/stats`);
+    const d = await r.json();
+    const el = document.getElementById('src-clear');
+    el.innerHTML = Object.entries(d.bySource || {})
+      .sort((a,b) => b[1]-a[1])
+      .map(([src, n]) => `<div class="psb-row" style="cursor:pointer;" onclick="clearSource('${src}')"
+        onmouseover="this.style.background='#0a0a0a'" onmouseout="this.style.background=''">
+        <span class="psb-label">${src}</span>
+        <span style="color:#cc3333;font-size:9px;">${n} ✕</span>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+// ── Sidebar helpers ───────────────────────────────────────────────────────────
+function setSbProxy(online) {
+  const el = document.getElementById('sb-proxy');
+  if (!el) return;
+  el.textContent  = online ? 'ONLINE' : 'OFFLINE';
+  el.className    = online ? 'psb-ok' : 'psb-err';
+}
+
+function sbLog(msg, cls='') {
+  const el = document.getElementById('sb-log');
+  if (!el) return;
+  const d = document.createElement('div');
+  d.className   = 'psb-log' + (cls ? ' psb-log-'+cls : '');
+  d.textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) + ' ' + msg;
+  el.prepend(d);
+  while (el.children.length > 12) el.lastChild.remove();
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

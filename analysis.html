@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Analysis</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">AI ANALYSIS</div><div class="page-hdr-sub">Claude Sonnet · web search enabled · deep research</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="clearOutput()">CLEAR</button>
+      <button class="t-btn" onclick="runAnalysis()">⚡ ANALYZE</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-queries">0</div><div class="tkl">QUERIES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-model" style="color:#aacc00;">SONNET</div><div class="tkl">MODEL</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-web" style="color:#00ff41;">ON</div><div class="tkl">WEB SEARCH</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-ts">—</div><div class="tkl">LAST RUN</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchPageTab('query',this)">QUERY</button>
+      <button class="page-tab" onclick="switchPageTab('history',this)">HISTORY</button>
+    </div>
+    <div class="page-body">
+      <div class="page-panel active" id="panel-query">
+        <!-- Input area -->
+        <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:12px;margin-bottom:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 120px;gap:8px;margin-bottom:8px;">
+            <div><div class="t-label">Sport / Context</div>
+              <select class="t-select" id="an-sport" style="width:100%;"><option value="">All Sports</option><option>NBA</option><option>NFL</option><option>MLB</option><option>NHL</option><option>EPL</option></select>
+            </div>
+            <div><div class="t-label">Analysis Type</div>
+              <select class="t-select" id="an-type" style="width:100%;"><option value="game">Single Game Deep Dive</option><option value="slate">Full Slate</option><option value="prop">Player Props</option><option value="system">System / Trend</option><option value="custom">Custom</option></select>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:14px;">
+              <input type="checkbox" id="web-search" checked style="accent-color:#00ff41;">
+              <label for="web-search" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;cursor:pointer;">WEB SEARCH</label>
+            </div>
+          </div>
+          <div class="t-label" style="margin-bottom:4px;">Query</div>
+          <textarea class="t-input" id="an-query" rows="3" placeholder="e.g. Analyze Lakers vs Nuggets tonight — injuries, line movement, public betting, best bet..." style="resize:none;line-height:1.6;width:100%;"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="t-btn" onclick="runAnalysis()" style="flex:1;">⚡ RUN ANALYSIS <span style="font-size:9px;letter-spacing:1px;">(Ctrl+Enter)</span></button>
+          </div>
+        </div>
+        <div id="an-out">
+          <div class="tl"><span class="td">VIC&gt;</span><span class="ta">enter a query above and click RUN ANALYSIS</span></div>
+          <div class="tl"><span class="td">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="tm">web search pulls live data · Claude Sonnet handles analysis</span></div>
+          <div style="margin-top:12px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>
+        </div>
+      </div>
+      <div class="page-panel" id="panel-history"><div class="tl"><span class="tm">no history yet</span></div></div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">CLAUDE</span><span id="sb-claude" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK QUERIES</div>
+    <div style="display:flex;flex-direction:column;gap:3px;padding:4px 0;">
+      <button class="psb-quicklink" style="text-align:left;cursor:pointer;border:none;background:none;" onclick="setQuery('Analyze the full slate today — best bets across all sports')">Full slate analysis</button>
+      <button class="psb-quicklink" style="text-align:left;cursor:pointer;border:none;background:none;" onclick="setQuery('Find the best player prop bets today — injury-based edges')">Prop edges today</button>
+      <button class="psb-quicklink" style="text-align:left;cursor:pointer;border:none;background:none;" onclick="setQuery('Find reverse line movement situations today')">RLM spots</button>
+      <button class="psb-quicklink" style="text-align:left;cursor:pointer;border:none;background:none;" onclick="setQuery('Best totals plays today based on injuries and weather')">Totals angles</button>
+    </div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="analysis.html">ANALYSIS</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <a class="psb-quicklink" href="news.html">INTEL</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('analysis');
+checkServerStatus();
+function switchPageTab(name, el) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + name);
+  if (panel) panel.classList.add('active');
+}
+let queryCount=0,history=[];
+function setQuery(q){document.getElementById('an-query').value=q;switchPageTab('query',document.querySelector('.page-tab'));}
+async function runAnalysis(){
+  const query=document.getElementById('an-query').value.trim();
+  const sport=document.getElementById('an-sport').value;
+  const type=document.getElementById('an-type').value;
+  const useWeb=document.getElementById('web-search').checked;
+  if(!query){document.getElementById('an-query').focus();return;}
+  const out=document.getElementById('an-out');
+  out.innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">running analysis'+(useWeb?' with web search':'')+'...</span></div>';
+  const typeCtx={game:'Single game deep dive.',slate:'Full slate analysis.',prop:'Player props research.',system:'System/trend analysis.',custom:''}[type]||'';
+  const prompt=`Elite sharp betting analyst.${sport?` Sport: ${sport}.`:''} ${typeCtx}\n\nQUERY: ${query}\n\nProvide comprehensive actionable analysis:\n- Key factors and data\n- Sharp betting angle if applicable\n- Specific bet recommendation with odds\n- Confidence level\n\nTerminal style. Be specific and sharp.`;
+  try{
+    const text=useWeb?await proxyClaudeWithSearch(prompt,2000):await proxyClaude(prompt,2000);
+    queryCount++;document.getElementById('k-queries').textContent=queryCount;
+    document.getElementById('k-ts').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    out.innerHTML=text.split('\n').filter(l=>l.trim()).map(l=>{
+      const isHdr=/^[0-9]+\.|^[A-Z\s]+:/.test(l.trim());
+      return `<div class="tl"><span class="td">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${isHdr?'#00ff41':'#2a8a2a'};line-height:1.8;">${l.replace(/^[#*]+\s*/,'')}</span></div>`;
+    }).join('')+`<div style="margin-top:10px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+    history.unshift({query,text,ts:new Date().toLocaleTimeString()});
+    renderHistory();sbLog('analysis complete','ok');
+  }catch(e){out.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;sbLog(e.message,'err');}
+}
+function clearOutput(){
+  document.getElementById('an-out').innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">cleared</span></div><div style="margin-top:8px;"><span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>';
+}
+function renderHistory(){
+  const el=document.getElementById('panel-history');
+  if(!history.length){el.innerHTML='<div class="tl"><span class="tm">no history</span></div>';return;}
+  el.innerHTML=history.map((h,i)=>`<div style="background:#050b05;border:1px solid #0f2010;padding:10px 12px;border-radius:2px;margin-bottom:6px;cursor:pointer;" onclick="loadHistory(${i})">
+    <div class="tl" style="border:none;padding:0;"><span class="tb" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h.query}</span><span class="td">${h.ts}</span></div>
+  </div>`).join('');
+}
+function loadHistory(i){
+  const h=history[i];if(!h)return;
+  document.getElementById('an-query').value=h.query;
+  document.getElementById('an-out').innerHTML=h.text.split('\n').filter(l=>l.trim()).map(l=>`<div class="tl"><span class="td">VIC&gt;</span><span style="color:#2a8a2a;">${l}</span></div>`).join('');
+  switchPageTab('query',document.querySelector('.page-tab'));
+}
+document.getElementById('an-query').addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter')runAnalysis();});
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){const cfg=await r.json();document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';document.getElementById('sb-claude').className=cfg.claudeKey?'psb-ok':'psb-err';document.getElementById('sb-claude').textContent=cfg.claudeKey?'KEY SET':'NO KEY';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

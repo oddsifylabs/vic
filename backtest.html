@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Backtest</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">BACKTEST</div><div class="page-hdr-sub">P&amp;L chart · monthly · sport · bet type · AI deep analysis</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="aiAnalysis()">AI DEEP ANALYSIS</button>
+      <button class="t-btn" onclick="load()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="bt-profit">—</div><div class="tkl">TOTAL P&amp;L</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="bt-wr">—</div><div class="tkl">WIN RATE</div><div class="tks" id="bt-record">—</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="bt-roi">—</div><div class="tkl">ROI</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="bt-streak">—</div><div class="tkl">BEST STREAK</div><div class="tks" id="bt-bets">0 bets</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchTab('chart',this)">P&amp;L CHART</button>
+      <button class="page-tab" onclick="switchTab('monthly',this)">MONTHLY</button>
+      <button class="page-tab" onclick="switchTab('sport',this)">BY SPORT</button>
+      <button class="page-tab" onclick="switchTab('type',this)">BY TYPE</button>
+      <button class="page-tab" id="ai-tab" onclick="switchTab('ai',this)">AI ANALYSIS</button>
+    </div>
+    <div class="page-body" id="bt-body">
+      <div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading bet history...</span></div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">BETS</span><span id="sb-bets" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">PERFORMANCE</div>
+    <div class="psb-row"><span class="psb-label">BEST SPORT</span><span id="sb-best" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">WORST SPORT</span><span id="sb-worst" class="psb-err">—</span></div>
+    <div class="psb-row"><span class="psb-label">PENDING</span><span id="sb-pending" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="backtest.html">BACKTEST</a>
+    <a class="psb-quicklink" href="tracker.html">TRACKER</a>
+    <a class="psb-quicklink" href="clv.html">CLV</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('backtest');
+checkServerStatus();
+let bets=[],activeTab='chart',chartInst=null;
+load();
+async function load(){
+  bets=await getBets();
+  updateKPIs();renderTab();
+  document.getElementById('sb-bets').textContent=bets.length;
+  document.getElementById('sb-bets').className=bets.length>0?'psb-ok':'psb-val';
+  document.getElementById('sb-pending').textContent=bets.filter(b=>b.result==='pending').length;
+  // Best/worst sport
+  const byS={};bets.filter(b=>b.result!=='pending').forEach(b=>{const s=b.sport||'?';if(!byS[s])byS[s]={p:0,n:0};byS[s].p+=b.profit||0;});
+  const sorted=Object.entries(byS).sort((a,b)=>b[1].p-a[1].p);
+  if(sorted.length){document.getElementById('sb-best').textContent=sorted[0][0];document.getElementById('sb-best').className='psb-ok';}
+  if(sorted.length>1){document.getElementById('sb-worst').textContent=sorted[sorted.length-1][0];}
+  sbLog(`${bets.length} bets loaded`,'ok');
+}
+function updateKPIs(){
+  const settled=bets.filter(b=>b.result!=='pending');
+  const wins=settled.filter(b=>b.result==='win').length;
+  const losses=settled.filter(b=>b.result==='loss').length;
+  const profit=bets.reduce((s,b)=>s+(b.profit||0),0);
+  const staked=settled.reduce((s,b)=>s+(b.units||1),0);
+  const wr=settled.length?(wins/settled.length*100).toFixed(1):null;
+  const roi=staked>0?(profit/staked*100).toFixed(1):null;
+  const pe=document.getElementById('bt-profit');
+  pe.textContent=profit!==0?(profit>=0?'+':'')+profit.toFixed(1)+'u':'0u';pe.style.color=profit>=0?'#00ff41':'#cc3333';
+  document.getElementById('bt-wr').textContent=wr!==null?wr+'%':'—';
+  document.getElementById('bt-record').textContent=`${wins}W ${losses}L`;
+  document.getElementById('bt-roi').textContent=roi!==null?(roi>=0?'+':'')+roi+'%':'—';
+  let maxStr=0,cur=0,curT='';
+  settled.forEach(b=>{if(b.result===curT){cur++;maxStr=Math.max(maxStr,cur);}else{cur=1;curT=b.result;}});
+  document.getElementById('bt-streak').textContent=maxStr?maxStr+'W':'—';
+  document.getElementById('bt-bets').textContent=`${bets.length} bets`;
+}
+function switchTab(name,el){
+  activeTab=name;document.querySelectorAll('.page-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTab();
+}
+function renderTab(){
+  if(activeTab==='chart')renderChart();
+  else if(activeTab==='monthly')renderBreakdown(b=>{const d=new Date(b.date||'');return isNaN(d)?b.date:(d.toLocaleDateString('en-US',{year:'numeric',month:'short'}));});
+  else if(activeTab==='sport')renderBreakdown(b=>b.sport||'Unknown');
+  else if(activeTab==='type')renderBreakdown(b=>b.betType||'Unknown');
+  else if(activeTab==='ai')document.getElementById('bt-body').innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">click AI DEEP ANALYSIS to run</span></div><div style="margin-top:8px;"><span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>';
+}
+function renderChart(){
+  const body=document.getElementById('bt-body');
+  if(!bets.length){body.innerHTML='<div class="tl"><span class="tm">no bets logged yet</span></div>';return;}
+  body.innerHTML='<div style="height:320px;padding:10px 0;"><canvas id="plChart"></canvas></div>';
+  if(chartInst){chartInst.destroy();chartInst=null;}
+  const settled=bets.filter(b=>b.result!=='pending');
+  let cum=0;
+  const labels=settled.map((_,i)=>i+1);
+  const data=settled.map(b=>{cum+=b.profit||0;return parseFloat(cum.toFixed(2));});
+  chartInst=new Chart(document.getElementById('plChart'),{type:'line',data:{labels,datasets:[{label:'P/L',data,borderColor:'#00ff41',backgroundColor:'rgba(0,255,65,0.04)',borderWidth:2,pointRadius:2,pointBackgroundColor:'#00ff41',tension:0.3,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#1e4a1e',font:{family:'JetBrains Mono',size:10}},grid:{color:'#0a180a'}},y:{ticks:{color:'#2a6a2a',font:{family:'JetBrains Mono',size:10},callback:v=>(v>=0?'+':'')+v+'u'},grid:{color:'#0a180a'},border:{color:'#0f2010'}}}}});
+}
+function renderBreakdown(groupFn){
+  const body=document.getElementById('bt-body');
+  if(!bets.length){body.innerHTML='<div class="tl"><span class="tm">no bets logged yet</span></div>';return;}
+  const groups={};
+  bets.forEach(b=>{const k=groupFn(b)||'?';if(!groups[k])groups[k]={wins:0,losses:0,profit:0,bets:0};const g=groups[k];g.bets++;if(b.result==='win')g.wins++;else if(b.result==='loss')g.losses++;g.profit+=b.profit||0;});
+  const entries=Object.entries(groups).sort((a,b)=>b[1].profit-a[1].profit);
+  body.innerHTML=`<table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;"><thead><tr>${['GROUP','BETS','W','L','WIN%','P/L'].map(h=>`<th style="padding:6px 10px;text-align:left;color:#2a6a2a;font-size:9px;letter-spacing:1.5px;border-bottom:1px solid #0f2010;">${h}</th>`).join('')}</tr></thead><tbody>${entries.map(([k,g])=>{
+    const wr=g.bets?((g.wins/g.bets)*100).toFixed(1):'—';
+    const plColor=(g.profit||0)>=0?'#00ff41':'#cc3333';
+    return `<tr style="border-bottom:1px solid #060c06;"><td style="padding:7px 10px;color:#00cc33;font-weight:700;">${k}</td><td style="padding:7px 10px;color:#2a6a2a;">${g.bets}</td><td style="padding:7px 10px;color:#00ff41;">${g.wins}</td><td style="padding:7px 10px;color:#cc3333;">${g.losses}</td><td style="padding:7px 10px;color:#aacc00;">${wr}%</td><td style="padding:7px 10px;color:${plColor};font-weight:700;">${(g.profit||0)>=0?'+':''}${(g.profit||0).toFixed(2)}u</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+async function aiAnalysis(){
+  document.querySelectorAll('.page-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('ai-tab').classList.add('active');
+  activeTab='ai';
+  const body=document.getElementById('bt-body');
+  body.innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">running deep performance analysis...</span></div>';
+  const settled=bets.filter(b=>b.result!=='pending');
+  const ctx=settled.slice(-50).map(b=>`${b.bet}|${b.sport}|${b.betType}|${b.result}|${b.odds?fmtOdds(b.odds):''}|${(b.profit||0).toFixed(1)}u`).join('\n');
+  try{
+    const text=await proxyClaude(`Elite betting performance analyst. Analyze this bet history in depth:\n\n${ctx||'No bets yet.'}\n\n1. Performance summary\n2. Best/worst performing categories\n3. Pattern analysis\n4. Specific ROI improvement actions\n5. Risk management recommendations\n\nTerminal output.`,1800);
+    body.innerHTML=text.split('\n').filter(l=>l.trim()).map(l=>{
+      const isHdr=/^[0-9]+\./.test(l.trim());
+      return `<div class="tl"><span class="td">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${isHdr?'#00ff41':'#2a8a2a'};line-height:1.8;">${l}</span></div>`;
+    }).join('')+`<div style="margin-top:10px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+    sbLog('AI analysis complete','ok');
+  }catch(e){body.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;sbLog(e.message,'err');}
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

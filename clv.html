@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — CLV Tracker</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.clv-tbl{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.clv-tbl th{padding:6px 10px;text-align:left;color:#2a6a2a;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid #0f2010;position:sticky;top:0;background:#080e08;}
+.clv-tbl td{padding:7px 10px;border-bottom:1px solid #060c06;}
+.clv-tbl tr:hover td{background:#060c06;}
+.clv-pos{color:#00ff41;font-weight:700;}
+.clv-neg{color:#cc3333;font-weight:700;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">CLV TRACKER</div><div class="page-hdr-sub">Closing line value · edge retention · sharpness indicator</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="addEntry()">+ ADD CLV</button>
+      <button class="t-btn" onclick="load()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-avg">—</div><div class="tkl">AVG CLV</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-pos" style="color:#00ff41;">0</div><div class="tkl">POSITIVE</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-neg" style="color:#cc3333;">0</div><div class="tkl">NEGATIVE</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-total">0</div><div class="tkl">TOTAL ENTRIES</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchPageTab('entries',this)">ENTRIES</button>
+      <button class="page-tab" onclick="switchPageTab('guide',this)">GUIDE</button>
+    </div>
+    <div class="page-body">
+      <div class="page-panel active" id="panel-entries">
+        <div class="tl"><span class="td">VIC&gt;</span><span class="ta">no CLV entries yet — click + ADD CLV</span></div>
+        <div class="tl"><span class="td">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="tm">CLV = your bet line vs closing line at game time</span></div>
+      </div>
+      <div class="page-panel" id="panel-guide">
+        <div class="t-sec"><span>// WHAT IS CLV?</span></div>
+        <div class="tl"><span class="td">DEF</span><span>Closing Line Value = how your odds compare to the closing price</span></div>
+        <div class="tl"><span class="td">GOOD</span><span class="tg">You got +105, line closed at -110 → +CLV → sharp</span></div>
+        <div class="tl"><span class="td">BAD</span><span class="tr">You got -110, line closed at +105 → -CLV → square</span></div>
+        <div class="t-sec" style="margin-top:12px;"><span>// TARGETS</span></div>
+        <div class="tl"><span class="td">TARGET</span><span class="ty">+1.5 to +3 CLV per bet average</span></div>
+        <div class="tl"><span class="td">SHARP</span><span class="tg">Consistently positive CLV = edge exists</span></div>
+        <div class="tl"><span class="td">SQUARE</span><span class="tr">Consistently negative CLV = losing long-term</span></div>
+        <div class="t-sec" style="margin-top:12px;"><span>// HOW TO CALCULATE</span></div>
+        <div class="tl"><span class="td">STEP1</span><span>Record your bet odds at time of placement</span></div>
+        <div class="tl"><span class="td">STEP2</span><span>Check closing odds at game time</span></div>
+        <div class="tl"><span class="td">STEP3</span><span>CLV = (your implied %) - (closing implied %)</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">SHARPNESS</div>
+    <div class="psb-row"><span class="psb-label">AVG CLV</span><span id="sb-avg" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">VERDICT</span><span id="sb-verdict" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="clv.html">CLV</a>
+    <a class="psb-quicklink" href="tracker.html">TRACKER</a>
+    <a class="psb-quicklink" href="backtest.html">BACKTEST</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('clv');
+checkServerStatus();
+function switchPageTab(name, el) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + name);
+  if (panel) panel.classList.add('active');
+}
+let entries=[];
+load();
+async function load(){
+  try{const r=await fetch(`${API}/api/clv`);if(r.ok)entries=await r.json();updateKPIs();renderEntries();}catch(e){sbLog(e.message,'err');}
+}
+function updateKPIs(){
+  if(!entries.length)return;
+  const vals=entries.map(e=>parseFloat(e.clv)||0);
+  const avg=(vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2);
+  const pos=vals.filter(v=>v>0).length,neg=vals.filter(v=>v<0).length;
+  const el=document.getElementById('k-avg');
+  el.textContent=(avg>=0?'+':'')+avg;el.style.color=avg>=0?'#00ff41':'#cc3333';
+  document.getElementById('k-pos').textContent=pos;
+  document.getElementById('k-neg').textContent=neg;
+  document.getElementById('k-total').textContent=entries.length;
+  document.getElementById('sb-avg').textContent=(avg>=0?'+':'')+avg;
+  document.getElementById('sb-avg').className=avg>=0?'psb-ok':'psb-err';
+  const verdict=avg>=2?'SHARP':avg>=0?'NEUTRAL':'SQUARE';
+  document.getElementById('sb-verdict').textContent=verdict;
+  document.getElementById('sb-verdict').className=avg>=2?'psb-ok':avg>=0?'psb-val':'psb-err';
+}
+function renderEntries(){
+  const el=document.getElementById('panel-entries');
+  if(!entries.length){el.innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">no CLV entries yet</span></div><div class="tl"><span class="td">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="tm">CLV = your bet line vs closing line at game time</span></div>';return;}
+  el.innerHTML=`<table class="clv-tbl"><thead><tr><th>DATE</th><th>BET</th><th>YOUR ODDS</th><th>CLOSING</th><th>CLV</th><th>SPORT</th><th>RESULT</th><th></th></tr></thead><tbody>${entries.slice().reverse().map(e=>{
+    const clv=parseFloat(e.clv)||0;
+    const clvCls=clv>0?'clv-pos':'clv-neg';
+    return `<tr>
+      <td style="color:#1e4a1e;">${e.date||''}</td>
+      <td style="color:#00cc33;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.bet||''}</td>
+      <td style="color:#aacc00;">${e.betOdds?fmtOdds(e.betOdds):'—'}</td>
+      <td style="color:#2a6a2a;">${e.closeOdds?fmtOdds(e.closeOdds):'—'}</td>
+      <td class="${clvCls}">${clv>0?'+':''}${clv}</td>
+      <td style="color:#2a6a2a;">${e.sport||'—'}</td>
+      <td style="color:${e.result==='win'?'#00ff41':e.result==='loss'?'#cc3333':'#aa9900'};">${(e.result||'—').toUpperCase()}</td>
+      <td><button class="t-btn-ghost" style="padding:2px 8px;font-size:9px;color:#cc3333;" onclick="deleteEntry(${e.id})">DEL</button></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+async function addEntry(){
+  const bet=prompt('Bet description:');if(!bet)return;
+  const betOdds=parseInt(prompt('Your bet odds (e.g. -110):')||'0');
+  const closeOdds=parseInt(prompt('Closing line odds:')||'0');
+  const sport=prompt('Sport (NBA/NFL/MLB/NHL):')||'NBA';
+  const result=prompt('Result (win/loss/pending):')||'pending';
+  if(!betOdds||!closeOdds)return;
+  const betImpl=Math.abs(betOdds)/(Math.abs(betOdds)+(betOdds>0?100:Math.abs(betOdds)+100)-Math.abs(betOdds));
+  const closeImpl=Math.abs(closeOdds)/(Math.abs(closeOdds)+(closeOdds>0?100:Math.abs(closeOdds)+100)-Math.abs(closeOdds));
+  const clv=((betImpl-closeImpl)*100).toFixed(2);
+  const entry={id:Date.now(),date:new Date().toLocaleDateString(),bet,betOdds,closeOdds,clv,sport,result};
+  await fetch(`${API}/api/clv`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)}).catch(()=>{});
+  entries.push(entry);updateKPIs();renderEntries();sbLog(`CLV entry added (${clv>0?'+':''}${clv})`,clv>0?'ok':'warn');
+}
+async function deleteEntry(id){
+  if(!confirm('Delete?'))return;
+  await fetch(`${API}/api/clv/${id}`,{method:'DELETE'}).catch(()=>{});
+  entries=entries.filter(e=>e.id!==id);updateKPIs();renderEntries();
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

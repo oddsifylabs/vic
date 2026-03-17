@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Parlay Builder</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.parlay-found{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:10px 14px;margin-bottom:7px;cursor:pointer;transition:border-color .12s;}
+.parlay-found:hover{border-color:#2a6a2a;}
+.parlay-found.selected{border-color:#00ff41;background:#020802;}
+.parlay-found.two-leg{border-left:3px solid #aacc00;}
+.parlay-found.three-leg{border-left:3px solid #00ff41;}
+.pf-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.pf-payout{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#00ff41;}
+.pf-badge{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;padding:1px 7px;border-radius:2px;}
+.pf-leg{font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;padding:3px 0;border-bottom:1px solid #0a1a0a;display:flex;justify-content:space-between;align-items:center;}
+.pf-leg:last-child{border-bottom:none;}
+.pf-leg-odds{color:#aacc00;flex-shrink:0;margin-left:8px;}
+.pf-meta{font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-top:5px;display:flex;gap:10px;}
+.builder-leg{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:7px 10px;margin-bottom:4px;display:flex;align-items:center;gap:8px;}
+.parlay-shell{display:grid;grid-template-columns:1fr 220px;height:100%;overflow:hidden;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">PARLAY BUILDER</div><div class="page-hdr-sub">AI finds best 2 &amp; 3-leg parlays · today's games only · EV + correlation</div></div></div>
+    <div class="page-hdr-actions">
+      <select class="t-select" id="sport-sel" style="font-size:10px;"><option value="all">All Sports</option><option value="nba">NBA</option><option value="nfl">NFL</option><option value="mlb">MLB</option><option value="nhl">NHL</option></select>
+      <select class="t-select" id="legs-sel" style="font-size:10px;"><option value="both">2 &amp; 3 Legs</option><option value="2">2-Leg Only</option><option value="3">3-Leg Only</option></select>
+      <button class="t-btn-ghost" onclick="clearBuilder()">CLEAR</button>
+      <button class="t-btn" id="find-btn" onclick="findParlays()">⚡ FIND BEST PARLAYS</button>
+    </div>
+  </div>
+  <div class="page-kpi" id="parlay-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-found">—</div><div class="tkl">FOUND</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-two" style="color:#aacc00;">—</div><div class="tkl">2-LEG</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-three" style="color:#00ff41;">—</div><div class="tkl">3-LEG</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-best" style="color:#00ff41;">—</div><div class="tkl">BEST PAYOUT</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchTab('finder',this)">AI FINDER</button>
+      <button class="page-tab" onclick="switchTab('builder',this)">MANUAL BUILDER</button>
+      <button class="page-tab" onclick="switchTab('saved',this)">SAVED</button>
+    </div>
+    <div class="parlay-shell" style="flex:1;overflow:hidden;">
+      <!-- Main content -->
+      <div style="display:flex;flex-direction:column;border-right:1px solid #0f2010;overflow:hidden;">
+        <div class="page-body" id="panel-finder" style="overflow-y:auto;">
+          <div class="tl"><span class="td">VIC&gt;</span><span class="ta">click FIND BEST PARLAYS to run AI analysis</span></div>
+          <div class="tl"><span class="td">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="tm">fetches live odds · finds best correlated 2 &amp; 3-leg combos · ranks by EV</span></div>
+          <div style="margin-top:10px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>
+        </div>
+        <div class="page-body" id="panel-builder" style="display:none;flex-direction:column;">
+          <div style="padding:7px 0;border-bottom:1px solid #0f2010;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;letter-spacing:2px;">// BUILD MANUALLY</span>
+            <button class="t-btn-ghost" style="padding:3px 10px;font-size:9px;" onclick="addManualLeg()">+ ADD LEG</button>
+          </div>
+          <div id="builder-legs" style="flex:1;overflow-y:auto;padding:8px 0;">
+            <div class="tl"><span class="td">VIC&gt;</span><span class="ta">add legs or click a found parlay to load</span></div>
+          </div>
+          <div style="padding:10px 0;border-top:1px solid #0f2010;flex-shrink:0;">
+            <div class="tl" style="border:none;padding:0;flex-wrap:wrap;gap:12px;">
+              <span><span class="td">LEGS </span><span class="tb" id="b-legs">0</span></span>
+              <span><span class="td">PAYOUT </span><span style="color:#00ff41;font-family:'JetBrains Mono',monospace;font-size:11px;" id="b-payout">—</span></span>
+              <span><span class="td">WIN% </span><span style="color:#aacc00;font-family:'JetBrains Mono',monospace;font-size:11px;" id="b-true">—</span></span>
+              <span><span class="td">EV </span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;" id="b-ev">—</span></span>
+              <span style="margin-left:auto;display:flex;gap:5px;">
+                <button class="t-btn-ghost" style="padding:3px 9px;font-size:9px;" onclick="saveBuilder()">SAVE</button>
+                <button class="t-btn" style="padding:3px 10px;font-size:9px;" onclick="logBuilderToTracker()">LOG</button>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="page-body" id="panel-saved" style="display:none;">
+          <div class="tl"><span class="tm">no saved parlays yet</span></div>
+        </div>
+      </div>
+      <!-- AI analysis panel -->
+      <div style="display:flex;flex-direction:column;overflow:hidden;background:#050b05;">
+        <div style="padding:7px 10px;border-bottom:1px solid #0f2010;flex-shrink:0;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;letter-spacing:2px;">// AI ANALYSIS</span>
+        </div>
+        <div class="page-body" id="ai-out" style="flex:1;font-size:10px;">
+          <div class="tl"><span class="td">VIC&gt;</span><span class="ta">run finder for analysis</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">ODDS API</span><span id="sb-odds" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">CLAUDE</span><span id="sb-claude" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">EV GUIDE</div>
+    <div class="psb-row"><span class="psb-label">POSITIVE</span><span class="psb-ok">sharp play</span></div>
+    <div class="psb-row"><span class="psb-label">NEUTRAL</span><span class="psb-val">fair value</span></div>
+    <div class="psb-row"><span class="psb-label">NEGATIVE</span><span class="psb-err">avoid</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="parlay.html">PARLAY</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <a class="psb-quicklink" href="tracker.html">TRACKER</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('parlay');
+checkServerStatus();
+
+const SPORT_KEYS = {
+  all: ['basketball_nba','americanfootball_nfl','baseball_mlb','icehockey_nhl'],  // Odds API uses full keys
+  nba: ['basketball_nba'],
+  nfl: ['americanfootball_nfl'],
+  mlb: ['baseball_mlb'],
+  nhl: ['icehockey_nhl']
+};
+
+let foundParlays  = [];
+let builderLegs   = [];
+let savedParlays  = JSON.parse(localStorage.getItem('vic_parlays') || '[]');
+let activeTab     = 'finder';
+
+// ── Tab switching ─────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.t-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  activeTab = name;
+  document.querySelectorAll('.t-panel').forEach(p => { p.style.display = 'none'; });
+  const panel = document.getElementById(`panel-${name}`);
+  if (panel) panel.style.display = (name === 'builder') ? 'flex' : 'block';
+  if (name === 'saved') renderSaved();
+}
+
+// ── Session queue from picks page ─────────────────────
+const queue = JSON.parse(sessionStorage.getItem('vic_parlay_queue') || '[]');
+if (queue.length) {
+  sessionStorage.removeItem('vic_parlay_queue');
+  queue.forEach(item => {
+    if (item.bet && item.odds) builderLegs.push({ id: Date.now() + Math.random(), bet: item.bet, odds: item.odds, sport: item.sport || '' });
+  });
+  if (builderLegs.length) {
+    switchTab('builder', document.querySelectorAll('.t-tab')[1]);
+    renderBuilder(); calcEV();
+    showToast(`${builderLegs.length} leg${builderLegs.length !== 1 ? 's' : ''} loaded from Legs page`);
+  }
+}
+
+// ── AI PARLAY FINDER ──────────────────────────────────
+async function findParlays() {
+  const btn = document.getElementById('find-btn');
+  btn.disabled = true; btn.textContent = 'RUNNING...';
+  document.getElementById('parlay-kpi').style.display = 'none';
+  foundParlays = [];
+
+  const sport  = document.getElementById('sport-sel').value;
+  const legsMode = document.getElementById('legs-sel').value;
+  const sports = SPORT_KEYS[sport] || SPORT_KEYS.all;
+
+  const todayLabel = new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  setFinderStatus(`Fetching today's odds (${todayLabel})...`);
+
+  // Step 1: Fetch odds for all sports
+  let oddsCtx = '';
+  let rawGames = [];
+  for (const key of sports) {
+    try {
+      const data = await proxyOdds(`sports/${key}/odds/`, {
+        regions: 'us,us2', markets: 'h2h,spreads,totals',
+        oddsFormat: 'american', bookmakers: 'hardrockbet,fanduel,draftkings,betmgm'
+      });
+      if (!Array.isArray(data) || !data.length) continue;
+
+      // ── Filter to TODAY'S games only ──────────────────
+      const todayStr = new Date().toLocaleDateString('en-US', { year:'numeric', month:'2-digit', day:'2-digit' });
+      const todayGames = data.filter(g => {
+        const gDate = new Date(g.commence_time).toLocaleDateString('en-US', { year:'numeric', month:'2-digit', day:'2-digit' });
+        return gDate === todayStr;
+      });
+      if (!todayGames.length) continue; // no games today for this sport
+
+      const sportShort = key.replace('basketball_','').replace('americanfootball_','').replace('baseball_','').replace('icehockey_','').toUpperCase();
+      todayGames.slice(0, 12).forEach(g => {
+        const hrb = g.bookmakers?.find(b => b.key === 'hardrockbet') || g.bookmakers?.[0];
+        const h2h  = hrb?.markets?.find(m => m.key === 'h2h');
+        const sprd = hrb?.markets?.find(m => m.key === 'spreads');
+        const tot  = hrb?.markets?.find(m => m.key === 'totals');
+        const time = new Date(g.commence_time).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+
+        // Build context line
+        const awayML   = h2h?.outcomes?.find(o => o.name === g.away_team)?.price;
+        const homeML   = h2h?.outcomes?.find(o => o.name === g.home_team)?.price;
+        const awaySprd = sprd?.outcomes?.find(o => o.name === g.away_team);
+        const homeSprd = sprd?.outcomes?.find(o => o.name === g.home_team);
+        const overTot  = tot?.outcomes?.find(o => o.name === 'Over');
+        const underTot = tot?.outcomes?.find(o => o.name === 'Under');
+
+        const legs = [];
+        if (awayML)   legs.push({ label: `${g.away_team} ML`, odds: awayML, sport: sportShort, game: `${g.away_team}@${g.home_team}` });
+        if (homeML)   legs.push({ label: `${g.home_team} ML`, odds: homeML, sport: sportShort, game: `${g.away_team}@${g.home_team}` });
+        if (awaySprd) legs.push({ label: `${g.away_team} ${awaySprd.point > 0 ? '+' : ''}${awaySprd.point}`, odds: awaySprd.price, sport: sportShort, game: `${g.away_team}@${g.home_team}` });
+        if (homeSprd) legs.push({ label: `${g.home_team} ${homeSprd.point > 0 ? '+' : ''}${homeSprd.point}`, odds: homeSprd.price, sport: sportShort, game: `${g.away_team}@${g.home_team}` });
+        if (overTot)  legs.push({ label: `Over ${overTot.point} (${g.away_team}@${g.home_team})`, odds: overTot.price,  sport: sportShort, game: `${g.away_team}@${g.home_team}` });
+        if (underTot) legs.push({ label: `Under ${underTot.point} (${g.away_team}@${g.home_team})`, odds: underTot.price, sport: sportShort, game: `${g.away_team}@${g.home_team}` });
+
+        rawGames.push({ away: g.away_team, home: g.home_team, sport: sportShort, time, legs });
+
+        oddsCtx += `${sportShort} ${time}: ${g.away_team} @ ${g.home_team}\n`;
+        if (awayML)   oddsCtx += `  ${g.away_team} ML: ${fmtOdds(awayML)}\n`;
+        if (homeML)   oddsCtx += `  ${g.home_team} ML: ${fmtOdds(homeML)}\n`;
+        if (awaySprd) oddsCtx += `  ${g.away_team} ${awaySprd.point > 0 ? '+' : ''}${awaySprd.point}: ${fmtOdds(awaySprd.price)}\n`;
+        if (homeSprd) oddsCtx += `  ${g.home_team} ${homeSprd.point > 0 ? '+' : ''}${homeSprd.point}: ${fmtOdds(homeSprd.price)}\n`;
+        if (overTot)  oddsCtx += `  Over ${overTot.point}: ${fmtOdds(overTot.price)}\n`;
+        if (underTot) oddsCtx += `  Under ${underTot.point}: ${fmtOdds(underTot.price)}\n`;
+      });
+    } catch(e) {}
+  }
+
+  if (!oddsCtx) {
+    setFinderStatus(`No games found for today (${new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}) — sport may be off-season or no games scheduled`);
+    btn.disabled = false; btn.textContent = '⚡ FIND BEST PARLAYS';
+    return;
+  }
+
+  // Step 2: Ask Claude for the best parlays
+  setFinderStatus('Claude analyzing correlations and finding best combinations...');
+
+  const legsInstr = legsMode === '2' ? 'ONLY 2-leg parlays.' : legsMode === '3' ? 'ONLY 3-leg parlays.' : 'Both 2-leg and 3-leg parlays.';
+
+  const todayFull = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  const prompt = `You are an elite sharp sports betting analyst specializing in parlay construction.
+
+Analyze these live odds for TODAY (${todayFull}) and find the BEST parlay combinations. ${legsInstr}
+
+RULES:
+- ALL legs must be from TODAY'S games only — do not reference or include any other date
+- Never combine two legs from the same game (no same-game parlays)
+- Prefer positive correlation (team wins + game goes over, road dog ML + under, etc.)
+- Prefer legs with -150 or better odds for parlays (more likely outcomes)
+- Avoid heavy chalk parlays (all -200 or worse)
+- Max 3 legs per parlay
+- Find the top 5 parlays ranked by expected value and sharpness
+
+LIVE ODDS:
+${oddsCtx}
+
+For EACH parlay output EXACTLY this format — no deviation:
+
+---PARLAY---
+LEGS: [number]
+LEG1: [Exact bet label] | [odds like -110 or +150]
+LEG2: [Exact bet label] | [odds]
+LEG3: [Exact bet label] | [odds] (only for 3-leg)
+PAYOUT: [combined american odds like +450]
+WIN_PCT: [true win probability as percent like 28.5]
+EV: [expected value like +3.2 or -1.8]
+CORRELATION: [POSITIVE/NEGATIVE/NEUTRAL]
+REASON: [1-2 sentences on why these legs work together]
+RANK: [1-5]
+---END---
+
+After all parlays add one line:
+SUMMARY: [brief overall recommendation]`;
+
+  try {
+    const text = await proxyClaude(prompt, 2200);
+    foundParlays = parseParlays(text, rawGames);
+
+    if (!foundParlays.length) {
+      setFinderStatus('No parlays parsed — showing raw output');
+      document.getElementById('panel-finder').innerHTML =
+        `<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;line-height:1.9;white-space:pre-wrap;padding:12px 0;">${text}</div>`;
+    } else {
+      renderFoundParlays(foundParlays);
+      // Update KPIs
+      const two   = foundParlays.filter(p => p.legs.length === 2).length;
+      const three = foundParlays.filter(p => p.legs.length === 3).length;
+      const bestPayout = foundParlays.reduce((best, p) => {
+        const po = parseInt(p.payout);
+        return po > best ? po : best;
+      }, 0);
+      document.getElementById('parlay-kpi').style.display = 'grid';
+      document.getElementById('k-found').textContent = foundParlays.length;
+      document.getElementById('k-two').textContent   = two;
+      document.getElementById('k-three').textContent = three;
+      document.getElementById('k-best').textContent  = bestPayout ? '+' + bestPayout : '—';
+    }
+
+    // Show summary in AI panel
+    const summary = text.match(/SUMMARY:\s*(.+)/i)?.[1] || '';
+    renderAIAnalysis(text, summary);
+
+  } catch(e) {
+    setFinderStatus('[ER] ' + e.message);
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ FIND BEST PARLAYS';
+}
+
+// ── Parse Claude's parlay output ──────────────────────
+function parseParlays(text, rawGames) {
+  const parlays = [];
+  const blocks  = text.split(/---PARLAY---/i).slice(1);
+
+  blocks.forEach(block => {
+    const clean = block.split(/---END---/i)[0].trim();
+    if (!clean) return;
+
+    const get = key => {
+      const m = clean.match(new RegExp(`^${key}:\\s*(.+)`, 'im'));
+      return m ? m[1].trim() : '';
+    };
+
+    // Parse all LEG lines
+    const legs = [];
+    for (let i = 1; i <= 3; i++) {
+      const legStr = get(`LEG${i}`);
+      if (!legStr) continue;
+      const parts = legStr.split('|');
+      if (parts.length < 2) continue;
+      const label = parts[0].trim();
+      const oddsStr = parts[1].trim();
+      const odds = parseInt(oddsStr.replace(/[^-+0-9]/g, '')) || null;
+      if (label && odds) legs.push({ label, odds });
+    }
+
+    if (legs.length < 2) return;
+
+    const payout     = get('PAYOUT').replace(/[^-+0-9]/g, '') || calcParlayOdds(legs);
+    const winPct     = get('WIN_PCT').replace(/[^0-9.]/g, '') || '';
+    const ev         = get('EV') || '';
+    const correlation= get('CORRELATION') || 'NEUTRAL';
+    const reason     = get('REASON') || '';
+    const rank       = parseInt(get('RANK')) || parlays.length + 1;
+
+    parlays.push({ legs, payout, winPct, ev, correlation, reason, rank });
+  });
+
+  return parlays.sort((a, b) => a.rank - b.rank);
+}
+
+function calcParlayOdds(legs) {
+  const dec = legs.map(l => l.odds > 0 ? l.odds / 100 + 1 : 100 / Math.abs(l.odds) + 1);
+  const total = dec.reduce((a, b) => a * b, 1);
+  return total >= 2 ? Math.round((total - 1) * 100) : Math.round(-(100 / (total - 1)));
+}
+
+// ── Render found parlays ──────────────────────────────
+function renderFoundParlays(parlays) {
+  const el = document.getElementById('panel-finder');
+  el.innerHTML = parlays.map((p, idx) => {
+    const legCount = p.legs.length;
+    const cls   = legCount === 2 ? 'two-leg' : 'three-leg';
+    const evNum = parseFloat(p.ev);
+    const evColor = !isNaN(evNum) ? (evNum >= 0 ? '#00ff41' : '#cc3333') : '#aacc00';
+    const corrColor = p.correlation === 'POSITIVE' ? '#00ff41' : p.correlation === 'NEGATIVE' ? '#cc3333' : '#aacc00';
+    const payout = parseInt(p.payout) || calcParlayOdds(p.legs);
+    const payoutStr = payout > 0 ? '+' + payout : String(payout);
+
+    return `<div class="parlay-found ${cls}" onclick="loadToBuilder(${idx})" title="Click to load into builder">
+      <div class="pf-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="pf-badge" style="color:${legCount===2?'#aacc00':'#00ff41'};border:1px solid ${legCount===2?'#332200':'#003300'};background:${legCount===2?'#080500':'#010800'};">${legCount}-LEG</span>
+          <span class="pf-badge" style="color:${corrColor};border:1px solid #0a1a0a;background:#020402;">${p.correlation}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">#${p.rank} RANK</span>
+        </div>
+        <div style="text-align:right;">
+          <div class="pf-payout">${payoutStr}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${evColor};">EV ${p.ev||'—'} · WIN ${p.winPct||'—'}%</div>
+        </div>
+      </div>
+      ${p.legs.map(l => `<div class="pf-leg">
+        <span>${l.label}</span>
+        <span class="pf-leg-odds">${fmtOdds(l.odds)}</span>
+      </div>`).join('')}
+      ${p.reason ? `<div class="pf-meta"><span>${p.reason}</span></div>` : ''}
+      <div class="pf-meta" style="margin-top:4px;justify-content:flex-end;">
+        <span style="color:#2a6a2a;font-size:9px;letter-spacing:1px;">CLICK TO LOAD INTO BUILDER →</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAIAnalysis(fullText, summary) {
+  const out = document.getElementById('ai-out');
+  const lines = fullText.split('\n').filter(l =>
+    l.trim() && !l.includes('---PARLAY---') && !l.includes('---END---') &&
+    !/^(LEG[123]|PAYOUT|WIN_PCT|EV|CORRELATION|RANK):/i.test(l.trim())
+  );
+  out.innerHTML = lines.map(l => {
+    const isKey = /^(REASON|SUMMARY|LEGS):/i.test(l.trim());
+    const col   = isKey ? '#00ff41' : '#2a8a2a';
+    return `<div class="tl"><span class="td">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${col};">${l}</span></div>`;
+  }).join('') + `<div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+}
+
+// ── Load parlay into builder ──────────────────────────
+function loadToBuilder(idx) {
+  const p = foundParlays[idx];
+  if (!p) return;
+  builderLegs = p.legs.map(l => ({ id: Date.now() + Math.random(), bet: l.label, odds: l.odds }));
+  switchTab('builder', document.querySelectorAll('.t-tab')[1]);
+  renderBuilder(); calcEV();
+  // Highlight the selected card
+  document.querySelectorAll('.parlay-found').forEach((el, i) => {
+    el.classList.toggle('selected', i === idx);
+  });
+  // Trigger AI analysis
+  analyzeCurrentBuilder();
+}
+
+// ── Builder ───────────────────────────────────────────
+function addManualLeg() {
+  const bet  = prompt('Bet description (e.g. Lakers -4.5):');
+  if (!bet) return;
+  const odds = parseInt(prompt('Odds (e.g. -110, +150):')) || null;
+  if (!odds) return;
+  builderLegs.push({ id: Date.now(), bet, odds });
+  renderBuilder(); calcEV();
+}
+
+function removeBuilderLeg(id) {
+  builderLegs = builderLegs.filter(l => l.id !== id);
+  renderBuilder(); calcEV();
+}
+
+function renderBuilder() {
+  const el = document.getElementById('builder-legs');
+  if (!builderLegs.length) {
+    el.innerHTML = '<div class="tl"><span class="td">VIC&gt;</span><span class="ta">add legs manually or click a found parlay above</span></div>';
+    return;
+  }
+  el.innerHTML = builderLegs.map((l, i) => `
+    <div class="builder-leg">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;flex-shrink:0;">${i + 1}.</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;flex:1;">${l.bet}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#aacc00;flex-shrink:0;margin-left:8px;">${fmtOdds(l.odds)}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-left:6px;">(${toImplied(l.odds)}%)</span>
+      <button class="t-btn-ghost" style="padding:2px 8px;font-size:9px;color:#cc3333;margin-left:8px;flex-shrink:0;" onclick="removeBuilderLeg(${l.id})">✕</button>
+    </div>`).join('');
+}
+
+function calcEV() {
+  if (!builderLegs.length) {
+    ['b-legs','b-payout','b-true','b-ev'].forEach(id => {
+      document.getElementById(id).textContent = id === 'b-legs' ? '0' : '—';
+    });
+    return;
+  }
+  const decimals   = builderLegs.map(l => l.odds > 0 ? l.odds / 100 + 1 : 100 / Math.abs(l.odds) + 1);
+  const parlayDec  = decimals.reduce((a, b) => a * b, 1);
+  const parlayAmer = parlayDec >= 2 ? (parlayDec - 1) * 100 : -(100 / (parlayDec - 1));
+  const trueProb   = builderLegs.map(l => l.odds > 0 ? 100 / (l.odds + 100) : Math.abs(l.odds) / (Math.abs(l.odds) + 100)).reduce((a, b) => a * b, 1);
+  const impliedProb= 1 / parlayDec;
+  const ev         = ((trueProb / impliedProb) - 1) * 100;
+
+  document.getElementById('b-legs').textContent   = builderLegs.length;
+  document.getElementById('b-payout').textContent = fmtOdds(Math.round(parlayAmer));
+  document.getElementById('b-true').textContent   = (trueProb * 100).toFixed(1) + '%';
+  const evEl = document.getElementById('b-ev');
+  evEl.textContent  = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%';
+  evEl.style.color  = ev >= 0 ? '#00ff41' : '#cc3333';
+}
+
+// ── AI analyze current builder ────────────────────────
+async function analyzeCurrentBuilder() {
+  if (builderLegs.length < 2) return;
+  const out = document.getElementById('ai-out');
+  out.innerHTML = '<div class="tl"><span class="td">VIC&gt;</span><span class="ta">analyzing parlay correlation and EV...</span></div>';
+  const ctx = builderLegs.map(l => `${l.bet} (${fmtOdds(l.odds)})`).join('\n');
+  try {
+    const text = await quickSummary(`Sharp betting analyst. Analyze this ${builderLegs.length}-leg parlay:\n\n${ctx}\n\nProvide:\n1. Correlation assessment (positive/negative/neutral) and why\n2. Combined true win probability vs implied\n3. Key risk — what single event kills this parlay\n4. Final verdict: PLAY / REDUCE / AVOID with reasoning\n\nTerminal-style output. Be specific and concise.`, 600);
+    out.innerHTML = text.split('\n').filter(l => l.trim()).map(l => {
+      const isKey = /^[0-9]+\.|VERDICT|PLAY|AVOID|REDUCE/.test(l.trim());
+      return `<div class="tl"><span class="td">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${isKey ? '#00ff41' : '#2a8a2a'};">${l}</span></div>`;
+    }).join('') + `<div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+  } catch(e) {
+    out.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+  }
+}
+
+// ── Save / log ────────────────────────────────────────
+function saveBuilder() {
+  if (!builderLegs.length) return;
+  const parlay = { id: Date.now(), ts: new Date().toLocaleString(), legs: [...builderLegs] };
+  savedParlays.unshift(parlay);
+  if (savedParlays.length > 30) savedParlays = savedParlays.slice(0, 30);
+  localStorage.setItem('vic_parlays', JSON.stringify(savedParlays));
+  showToast('Parlay saved');
+}
+
+async function logBuilderToTracker() {
+  if (builderLegs.length < 2) { alert('Add at least 2 legs.'); return; }
+  const dec    = builderLegs.map(l => l.odds > 0 ? l.odds / 100 + 1 : 100 / Math.abs(l.odds) + 1);
+  const parlayD= dec.reduce((a, b) => a * b, 1);
+  const parlayA= Math.round(parlayD >= 2 ? (parlayD - 1) * 100 : -(100 / (parlayD - 1)));
+  const betStr = builderLegs.map(l => l.bet).join(' + ');
+  try {
+    await addBet({ bet: betStr, odds: parlayA, units: 1, result: 'pending', profit: 0, sport: builderLegs[0]?.sport || 'PARLAY', betType: `${builderLegs.length}-Leg Parlay`, book: 'Hard Rock Bet' });
+    showToast('Parlay logged to tracker', 'tracker.html', 'VIEW TRACKER →');
+  } catch(e) { alert('Error logging: ' + e.message); }
+}
+
+function clearBuilder() {
+  builderLegs = [];
+  renderBuilder(); calcEV();
+  document.querySelectorAll('.parlay-found').forEach(el => el.classList.remove('selected'));
+}
+
+// ── Saved parlays ─────────────────────────────────────
+function renderSaved() {
+  const el = document.getElementById('panel-saved');
+  if (!savedParlays.length) {
+    el.innerHTML = '<div class="tl"><span class="tm">no saved parlays yet</span></div>';
+    return;
+  }
+  el.innerHTML = savedParlays.map((p, i) => {
+    const dec = p.legs.map(l => l.odds > 0 ? l.odds / 100 + 1 : 100 / Math.abs(l.odds) + 1);
+    const parlayD = dec.reduce((a, b) => a * b, 1);
+    const parlayA = Math.round(parlayD >= 2 ? (parlayD - 1) * 100 : -(100 / (parlayD - 1)));
+    return `<div class="parlay-found ${p.legs.length === 2 ? 'two-leg' : 'three-leg'}" style="cursor:pointer;" onclick="loadSaved(${i})">
+      <div class="pf-header">
+        <div>
+          <span class="pf-badge" style="color:${p.legs.length===2?'#aacc00':'#00ff41'};border:1px solid #0a1a0a;">${p.legs.length}-LEG</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-left:8px;">${p.ts}</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="pf-payout" style="font-size:13px;">${parlayA > 0 ? '+' + parlayA : parlayA}</span>
+          <button class="t-btn-ghost" style="padding:2px 8px;font-size:9px;color:#cc3333;" onclick="event.stopPropagation();deleteSaved(${i})">DEL</button>
+        </div>
+      </div>
+      ${p.legs.map(l => `<div class="pf-leg"><span>${l.bet}</span><span class="pf-leg-odds">${fmtOdds(l.odds)}</span></div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+function loadSaved(i) {
+  builderLegs = savedParlays[i].legs.map(l => ({ ...l, id: Date.now() + Math.random() }));
+  switchTab('builder', document.querySelectorAll('.t-tab')[1]);
+  renderBuilder(); calcEV();
+  analyzeCurrentBuilder();
+}
+
+function deleteSaved(i) {
+  if (!confirm('Delete this saved parlay?')) return;
+  savedParlays.splice(i, 1);
+  localStorage.setItem('vic_parlays', JSON.stringify(savedParlays));
+  renderSaved();
+}
+
+// ── Helpers ───────────────────────────────────────────
+function setFinderStatus(msg) {
+  document.getElementById('panel-finder').innerHTML =
+    `<div class="tl"><span class="td">VIC&gt;</span><span class="ta">${msg}</span></div>
+     <div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+}
+
+function showToast(msg, href, linkLabel) {
+  const existing = document.getElementById('vic-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.id = 'vic-toast';
+  toast.style.cssText = 'position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:#050b05;border:1px solid #00ff41;padding:10px 18px;border-radius:2px;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#00cc33;z-index:900;display:flex;gap:14px;align-items:center;white-space:nowrap;';
+  toast.innerHTML = `<span>${msg}</span>${href ? `<a href="${href}" style="color:#00ff41;text-decoration:none;font-weight:700;">${linkLabel}</a>` : ''}`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+</script>
+// Sidebar status
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');if(!el)return;const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){const cfg=await r.json();document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';document.getElementById('sb-odds').className=cfg.oddsKey?'psb-ok':'psb-err';document.getElementById('sb-odds').textContent=cfg.oddsKey?'KEY SET':'NO KEY';document.getElementById('sb-claude').className=cfg.claudeKey?'psb-ok':'psb-err';document.getElementById('sb-claude').textContent=cfg.claudeKey?'KEY SET':'NO KEY';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</body>
+</html>

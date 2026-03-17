@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Bet Tracker</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.bt-tbl{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.bt-tbl th{padding:6px 10px;text-align:left;color:#2a6a2a;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid #0f2010;position:sticky;top:0;background:#080e08;white-space:nowrap;}
+.bt-tbl td{padding:6px 10px;border-bottom:1px solid #060c06;vertical-align:middle;}
+.bt-tbl tr:hover td{background:#060c06;}
+.res-sel{background:#050b05;border:1px solid #0f2010;color:#00cc33;font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 6px;border-radius:2px;cursor:pointer;}
+.log-form-panel{background:#050b05;border-bottom:1px solid #0f2010;padding:12px 16px;flex-shrink:0;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">BET TRACKER</div><div class="page-hdr-sub">P&amp;L · win rate · ROI · by sport / book / type</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="toggleLogForm()" id="log-form-btn">+ LOG BET</button>
+      <button class="t-btn-ghost" onclick="aiReview()">AI REVIEW</button>
+      <button class="t-btn" onclick="exportCSV()">EXPORT CSV</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="tk-profit">—</div><div class="tkl">P&amp;L</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="tk-wr">—</div><div class="tkl">WIN RATE</div><div class="tks" id="tk-record">—</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="tk-roi">—</div><div class="tkl">ROI</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="tk-total">0</div><div class="tkl">TOTAL BETS</div><div class="tks" id="tk-pending">—</div></div>
+  </div>
+  <div class="page-main">
+    <!-- Log form (hidden by default) -->
+    <div id="log-form" style="display:none;" class="log-form-panel">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div><div class="t-label">Bet Description</div><input type="text" class="t-input" id="tr-bet" placeholder="e.g. Lakers ML +120"></div>
+        <div><div class="t-label">Odds</div><input type="number" class="t-input" id="tr-odds" placeholder="-110"></div>
+        <div><div class="t-label">Units</div><input type="number" class="t-input" id="tr-units" value="1" step="0.5" min="0.5"></div>
+        <div><div class="t-label">Sport</div><select class="t-select" id="tr-sport" style="width:100%;"><option>NBA</option><option>NFL</option><option>MLB</option><option>NHL</option><option>EPL</option><option>MLS</option></select></div>
+        <div><div class="t-label">Book</div><select class="t-select" id="tr-book" style="width:100%;"><option>Hard Rock Bet</option><option>FanDuel</option><option>DraftKings</option><option>BetMGM</option></select></div>
+        <div><div class="t-label">Result</div><select class="t-select" id="tr-result" style="width:100%;"><option value="pending">PENDING</option><option value="win">WIN</option><option value="loss">LOSS</option><option value="push">PUSH</option></select></div>
+      </div>
+      <div style="display:flex;gap:8px;"><button class="t-btn" onclick="saveBet()">SAVE BET</button><button class="t-btn-ghost" onclick="toggleLogForm()">CANCEL</button></div>
+    </div>
+    <!-- Filters -->
+    <div style="display:flex;gap:6px;padding:7px 16px;border-bottom:1px solid #0f2010;flex-shrink:0;flex-wrap:wrap;background:#050b05;">
+      <select class="t-select" id="f-sport" onchange="renderBets()" style="font-size:10px;"><option value="all">ALL SPORTS</option><option>NBA</option><option>NFL</option><option>MLB</option><option>NHL</option></select>
+      <select class="t-select" id="f-result" onchange="renderBets()" style="font-size:10px;"><option value="all">ALL RESULTS</option><option value="win">WIN</option><option value="loss">LOSS</option><option value="pending">PENDING</option></select>
+      <select class="t-select" id="f-book" onchange="renderBets()" style="font-size:10px;"><option value="all">ALL BOOKS</option><option>Hard Rock Bet</option><option>FanDuel</option><option>DraftKings</option><option>BetMGM</option></select>
+      <span id="f-count" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;align-self:center;margin-left:auto;"></span>
+    </div>
+    <div class="page-body" id="tr-body" style="overflow-y:auto;">
+      <div class="tl"><span class="ta">no bets yet — click LOG BET</span></div>
+    </div>
+    <div id="ai-out" style="padding:0 16px 10px;flex-shrink:0;"></div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">PERFORMANCE</div>
+    <div class="psb-row"><span class="psb-label">BEST SPORT</span><span id="sb-best" class="psb-ok">—</span></div>
+    <div class="psb-row"><span class="psb-label">WORST</span><span id="sb-worst" class="psb-err">—</span></div>
+    <div class="psb-row"><span class="psb-label">AVG ODDS</span><span id="sb-avgodds" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="tracker.html">TRACKER</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <a class="psb-quicklink" href="clv.html">CLV</a>
+    <a class="psb-quicklink" href="backtest.html">BACKTEST</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('tracker');
+checkServerStatus();
+let bets=[],logFormOpen=false;
+
+// URL params auto-save from picks page
+const params=new URLSearchParams(window.location.search);
+if(params.get('bet')){
+  const bet=decodeURIComponent(params.get('bet'));
+  const odds=parseInt(params.get('odds'))||null;
+  const units=parseFloat(params.get('units'))||1;
+  const sport=(params.get('sport')||'NBA').toUpperCase();
+  const book=decodeURIComponent(params.get('book')||'Hard Rock Bet');
+  (async()=>{
+    try{
+      await addBet({bet,odds,units,result:'pending',profit:0,sport,betType:'Game Bet',book});
+      await load();
+      const banner=document.createElement('div');
+      banner.style.cssText='position:fixed;top:58px;left:0;right:0;background:#003300;border-bottom:1px solid #00ff41;padding:8px 20px;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#00ff41;z-index:500;text-align:center;';
+      banner.textContent=`✓ LEG LOGGED: ${bet}`;
+      document.body.appendChild(banner);setTimeout(()=>banner.remove(),3000);
+      history.replaceState({},'',window.location.pathname);
+    }catch(e){document.getElementById('tr-bet').value=bet;if(odds)document.getElementById('tr-odds').value=odds;document.getElementById('tr-units').value=units;toggleLogForm();}
+  })();
+}
+
+async function load(){
+  bets=await getBets();updateKPIs();renderBets();updateSidebar();sbLog(`${bets.length} bets`,'ok');
+}
+function toggleLogForm(){
+  logFormOpen=!logFormOpen;
+  document.getElementById('log-form').style.display=logFormOpen?'block':'none';
+  document.getElementById('log-form-btn').textContent=logFormOpen?'CANCEL':'+ LOG BET';
+}
+function updateKPIs(){
+  const settled=bets.filter(b=>b.result!=='pending');
+  const wins=settled.filter(b=>b.result==='win').length;
+  const losses=settled.filter(b=>b.result==='loss').length;
+  const profit=bets.reduce((s,b)=>s+(b.profit||0),0);
+  const staked=settled.reduce((s,b)=>s+(b.units||1),0);
+  const wr=settled.length?(wins/settled.length*100).toFixed(1):null;
+  const roi=staked>0?(profit/staked*100).toFixed(1):null;
+  const pe=document.getElementById('tk-profit');
+  pe.textContent=profit!==0?(profit>=0?'+':'')+profit.toFixed(1)+'u':'0u';pe.style.color=profit>=0?'#00ff41':'#cc3333';
+  document.getElementById('tk-wr').textContent=wr!==null?wr+'%':'—';
+  document.getElementById('tk-record').textContent=`${wins}W ${losses}L`;
+  document.getElementById('tk-roi').textContent=roi!==null?(roi>=0?'+':'')+roi+'%':'—';
+  document.getElementById('tk-total').textContent=bets.length;
+  document.getElementById('tk-pending').textContent=`${bets.filter(b=>b.result==='pending').length} pending`;
+}
+function updateSidebar(){
+  if(!bets.length)return;
+  const byS={};bets.filter(b=>b.result!=='pending').forEach(b=>{const s=b.sport||'?';if(!byS[s])byS[s]=0;byS[s]+=b.profit||0;});
+  const sorted=Object.entries(byS).sort((a,b)=>b[1]-a[1]);
+  if(sorted.length){document.getElementById('sb-best').textContent=sorted[0][0];}
+  if(sorted.length>1){document.getElementById('sb-worst').textContent=sorted[sorted.length-1][0];}
+  const oddsArr=bets.filter(b=>b.odds).map(b=>b.odds);
+  if(oddsArr.length){const avg=Math.round(oddsArr.reduce((s,v)=>s+v,0)/oddsArr.length);document.getElementById('sb-avgodds').textContent=fmtOdds(avg);}
+}
+function renderBets(){
+  const sf=document.getElementById('f-sport').value;
+  const rf=document.getElementById('f-result').value;
+  const bf=document.getElementById('f-book').value;
+  let filtered=bets.filter(b=>(sf==='all'||b.sport===sf)&&(rf==='all'||b.result===rf)&&(bf==='all'||b.book===bf));
+  document.getElementById('f-count').textContent=`${filtered.length} bets`;
+  if(!filtered.length){document.getElementById('tr-body').innerHTML='<div class="tl"><span class="tm">no bets match filter</span></div>';return;}
+  document.getElementById('tr-body').innerHTML=`<table class="bt-tbl"><thead><tr><th>DATE</th><th>BET</th><th>SPORT</th><th>BOOK</th><th>ODDS</th><th>UNITS</th><th>RESULT</th><th>P&L</th><th></th></tr></thead><tbody>${filtered.slice().reverse().map(b=>{
+    const res=(b.result||'pending').toLowerCase();
+    const resCol=res==='win'?'#00ff41':res==='loss'?'#cc3333':res==='push'?'#aacc00':'#2a6a2a';
+    const profit=parseFloat(b.profit)||0;
+    const plTxt=res==='pending'?`${b.units||1}u`:(profit>=0?'+':'')+profit.toFixed(1)+'u';
+    const plColor=res==='pending'?'#2a6a2a':profit>0?'#00ff41':profit<0?'#cc3333':'#aacc00';
+    return `<tr>
+      <td style="color:#1e4a1e;white-space:nowrap;">${b.date||''}</td>
+      <td style="color:#00cc33;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${b.bet}">${b.bet}</td>
+      <td style="color:#2a6a2a;">${b.sport||'—'}</td>
+      <td style="color:#1e4a1e;font-size:10px;">${(b.book||'').slice(0,8)}</td>
+      <td style="color:#aacc00;">${b.odds?fmtOdds(b.odds):'—'}</td>
+      <td style="color:#2a8a2a;">${b.units||1}u</td>
+      <td><select class="res-sel" onchange="setResult(${b.id},this.value)">
+        <option value="pending" ${res==='pending'?'selected':''}>PEND</option>
+        <option value="win" ${res==='win'?'selected':''}>WIN</option>
+        <option value="loss" ${res==='loss'?'selected':''}>LOSS</option>
+        <option value="push" ${res==='push'?'selected':''}>PUSH</option>
+      </select></td>
+      <td style="color:${plColor};font-weight:700;">${plTxt}</td>
+      <td>
+        <button class="t-btn-ghost" style="padding:2px 8px;font-size:9px;" onclick="editBet(${b.id})">EDIT</button>
+        <button class="t-btn-ghost" style="padding:2px 8px;font-size:9px;color:#cc3333;" onclick="removeBet(${b.id})">DEL</button>
+      </td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+async function saveBet(){
+  const bet=document.getElementById('tr-bet').value.trim();if(!bet)return;
+  const odds=parseInt(document.getElementById('tr-odds').value)||null;
+  const units=parseFloat(document.getElementById('tr-units').value)||1;
+  const result=document.getElementById('tr-result').value;
+  await addBet({bet,odds,units,result,profit:calcProfit(odds,units,result),sport:document.getElementById('tr-sport').value,betType:'Game Bet',book:document.getElementById('tr-book').value});
+  document.getElementById('tr-bet').value='';document.getElementById('tr-odds').value='';
+  document.getElementById('tr-result').value='pending';
+  toggleLogForm();await load();sbLog('bet saved','ok');
+}
+async function setResult(id,result){
+  const b=bets.find(x=>x.id===id);if(!b)return;
+  await updateBet(id,{result,profit:calcProfit(b.odds,b.units,result)});await load();
+}
+async function removeBet(id){
+  if(!confirm('Delete this bet?'))return;await deleteBet(id);await load();
+}
+function editBet(id){
+  const b=bets.find(x=>x.id===id);if(!b)return;
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML=`<div style="background:#050b05;border:1px solid #00ff41;width:500px;max-width:95vw;border-radius:2px;overflow:hidden;">
+    <div style="padding:10px 14px;border-bottom:1px solid #0f2010;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;letter-spacing:2px;">EDIT BET</span>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:#2a6a2a;font-size:16px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:14px;display:flex;flex-direction:column;gap:10px;">
+      <div><div class="t-label">Bet</div><input type="text" class="t-input" id="eb-bet" value="${(b.bet||'').replace(/"/g,"'")}"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
+        <div><div class="t-label">Odds</div><input type="number" class="t-input" id="eb-odds" value="${b.odds||''}"></div>
+        <div><div class="t-label">Units</div><input type="number" class="t-input" id="eb-units" value="${b.units||1}" step="0.5"></div>
+        <div><div class="t-label">Sport</div><select class="t-select" id="eb-sport" style="width:100%;">${['NBA','NFL','MLB','NHL','EPL','MLS'].map(s=>`<option ${s===b.sport?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div><div class="t-label">Result</div><select class="t-select" id="eb-result" style="width:100%;">${[['pending','PENDING'],['win','WIN'],['loss','LOSS'],['push','PUSH']].map(([v,l])=>`<option value="${v}" ${v===b.result?'selected':''}>${l}</option>`).join('')}</select></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <button class="t-btn" onclick="saveEdit(${id})" style="flex:1;">SAVE CHANGES</button>
+        <button class="t-btn-ghost" onclick="this.closest('[style*=fixed]').remove()">CANCEL</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+async function saveEdit(id){
+  const bet=document.getElementById('eb-bet')?.value.trim();if(!bet)return;
+  const odds=parseInt(document.getElementById('eb-odds')?.value)||null;
+  const units=parseFloat(document.getElementById('eb-units')?.value)||1;
+  const sport=document.getElementById('eb-sport')?.value;
+  const result=document.getElementById('eb-result')?.value||'pending';
+  await updateBet(id,{bet,odds,units,sport,result,profit:calcProfit(odds,units,result)});
+  document.querySelector('[style*="position:fixed"]')?.remove();await load();
+}
+async function aiReview(){
+  const out=document.getElementById('ai-out');
+  out.innerHTML='<div class="tl" style="padding:8px 0;"><span class="td">VIC&gt;</span><span class="ta">analyzing performance...</span></div>';
+  const ctx=bets.slice(-30).map(b=>`${b.bet}|${b.sport}|${b.result}|${b.odds?fmtOdds(b.odds):''}|${b.units}u|${(b.profit||0).toFixed(1)}`).join('\n');
+  try{
+    const text=await quickSummary(`Sharp analyst. Analyze bet history:\n${ctx||'No bets.'}\n\nTop 3 actionable adjustments. 1 sentence each.`,500);
+    out.innerHTML=`<div style="padding:8px 0;border-top:1px solid #0f2010;">${text.split('\n').filter(l=>l.trim()).map(l=>`<div class="tl"><span class="td">VIC&gt;</span><span style="color:#2a8a2a;">${l}</span></div>`).join('')}</div>`;
+  }catch(e){out.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;}
+}
+function exportCSV(){
+  if(!bets.length)return;
+  const rows=[['Date','Bet','Sport','Type','Book','Odds','Units','Result','P/L'],...bets.map(b=>[b.date||'',b.bet||'',b.sport||'',b.betType||'',b.book||'',b.odds||'',b.units||1,b.result||'',(b.profit||0).toFixed(2)])];
+  const csv=rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='vic_bets.csv';a.click();
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();load();
+</script>
+</body>
+</html>

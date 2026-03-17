@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Tools</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.tool-card{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:16px 18px;cursor:pointer;transition:border-color .12s,background .12s;display:flex;flex-direction:column;gap:8px;}
+.tool-card:hover{border-color:#2a6a2a;background:#040a04;}
+.tool-card.active-tool{border-color:#00ff41;background:#020902;}
+.tool-title{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#00cc33;letter-spacing:1px;}
+.tool-desc{font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;line-height:1.6;}
+.tool-badge{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;padding:2px 7px;border-radius:2px;border:1px solid #0f2010;color:#2a6a2a;align-self:flex-start;}
+.tool-badge.new{color:#00ff41;border-color:#003300;background:#010800;}
+.tool-badge.ai{color:#aacc00;border-color:#332200;background:#080500;}
+.tool-output{flex:1;overflow-y:auto;padding:12px 16px;}
+.calc-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+.calc-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;min-width:120px;}
+.calc-result{font-family:'JetBrains Mono',monospace;font-size:14px;color:#00ff41;font-weight:700;margin-top:4px;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">TOOLS</div><div class="page-hdr-sub">Calculators · converters · prop trends · sharp money · AI scout</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" id="back-btn" onclick="showGrid()" style="display:none;">← BACK</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" style="color:#00ff41;">11</div><div class="tkl">TOOLS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-calc-ev">—</div><div class="tkl">LAST EV</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-calc-kelly">—</div><div class="tkl">LAST KELLY</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-calc-conv">—</div><div class="tkl">LAST CONV.</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-body" id="tools-body">
+
+      <!-- Tool grid -->
+      <div id="tool-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+
+        <div class="tool-card" onclick="openTool('ev')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">📊</span>
+            <span class="tool-badge ai">CALC</span>
+          </div>
+          <div class="tool-title">EV CALCULATOR</div>
+          <div class="tool-desc">Expected value on any bet. Enter odds + true probability to find edge.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('kelly')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">💰</span>
+            <span class="tool-badge ai">CALC</span>
+          </div>
+          <div class="tool-title">KELLY CRITERION</div>
+          <div class="tool-desc">Optimal bet sizing based on bankroll + edge. Full and fractional Kelly.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('converter')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">🔄</span>
+            <span class="tool-badge">UTIL</span>
+          </div>
+          <div class="tool-title">ODDS CONVERTER</div>
+          <div class="tool-desc">Convert between American, Decimal, Fractional, and Implied %.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('hedger')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">🛡</span>
+            <span class="tool-badge">CALC</span>
+          </div>
+          <div class="tool-title">HEDGE CALCULATOR</div>
+          <div class="tool-desc">Calculate optimal hedge bet to lock in profit or reduce risk.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('midder')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">⚖️</span>
+            <span class="tool-badge">CALC</span>
+          </div>
+          <div class="tool-title">MIDDLING FINDER</div>
+          <div class="tool-desc">Find middle opportunities between two different lines on the same game.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('correlated')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">🔗</span>
+            <span class="tool-badge ai">AI</span>
+          </div>
+          <div class="tool-title">CORRELATED FINDER</div>
+          <div class="tool-desc">AI finds same-game correlated legs — win + player props that move together.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('scout')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">🤖</span>
+            <span class="tool-badge new">AI + WEB</span>
+          </div>
+          <div class="tool-title">AI SCOUT</div>
+          <div class="tool-desc">Research any team, player, or matchup with live web search + AI analysis.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('arbitrage')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">💎</span>
+            <span class="tool-badge">CALC</span>
+          </div>
+          <div class="tool-title">ARBITRAGE CALC</div>
+          <div class="tool-desc">Calculate arb % and optimal stakes across two books for guaranteed profit.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('devigger')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">🎯</span>
+            <span class="tool-badge">CALC</span>
+          </div>
+          <div class="tool-title">LINE DE-VIGGER</div>
+          <div class="tool-desc">Remove the vig from a line to find true fair odds and implied probability.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('proptrend')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">📉</span>
+            <span class="tool-badge new">AI + WEB</span>
+          </div>
+          <div class="tool-title">PROP TREND FINDER</div>
+          <div class="tool-desc">AI scans recent player logs, injury reports and line movement to find the sharpest prop bets today.</div>
+        </div>
+
+        <div class="tool-card" onclick="openTool('sharpmoney')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span style="font-size:22px;">🦈</span>
+            <span class="tool-badge new">AI + DATA</span>
+          </div>
+          <div class="tool-title">SHARP MONEY TRACKER</div>
+          <div class="tool-desc">Detect sharp action using public betting %, line movement, and reverse line movement across today's games.</div>
+        </div>
+
+      </div>
+
+      <!-- Individual tool panels (hidden by default) -->
+      <div id="tool-panel" style="display:none;"></div>
+
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">TOOLS</div>
+    <div id="tool-nav" style="display:flex;flex-direction:column;gap:2px;">
+      <a href="#" onclick="openTool('ev');return false;" class="psb-quicklink" id="tlink-ev">📊 EV Calc</a>
+      <a href="#" onclick="openTool('kelly');return false;" class="psb-quicklink" id="tlink-kelly">💰 Kelly</a>
+      <a href="#" onclick="openTool('converter');return false;" class="psb-quicklink" id="tlink-converter">🔄 Odds Conv.</a>
+      <a href="#" onclick="openTool('hedger');return false;" class="psb-quicklink" id="tlink-hedger">🛡 Hedge</a>
+      <a href="#" onclick="openTool('midder');return false;" class="psb-quicklink" id="tlink-midder">⚖️ Middle</a>
+      <a href="#" onclick="openTool('correlated');return false;" class="psb-quicklink" id="tlink-correlated">🔗 Correlated</a>
+      <a href="#" onclick="openTool('scout');return false;" class="psb-quicklink" id="tlink-scout">🤖 AI Scout</a>
+      <a href="#" onclick="openTool('arbitrage');return false;" class="psb-quicklink" id="tlink-arbitrage">💎 Arbitrage</a>
+      <a href="#" onclick="openTool('devigger');return false;" class="psb-quicklink" id="tlink-devigger">🎯 De-Vigger</a>
+      <a href="#" onclick="openTool('proptrend');return false;" class="psb-quicklink" id="tlink-proptrend">📉 Prop Trends</a>
+      <a href="#" onclick="openTool('sharpmoney');return false;" class="psb-quicklink" id="tlink-sharpmoney">🦈 Sharp Money</a>
+    </div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink" href="index.html">HOME</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <a class="psb-quicklink" href="tracker.html">TRACKER</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('tools');
+checkServerStatus();
+
+const TOOLS = {
+  ev: {
+    title: 'EV CALCULATOR',
+    render: () => `
+      <div class="t-sec"><span>// EXPECTED VALUE</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;max-width:480px;">
+        <div class="calc-row">
+          <span class="calc-label">Your Odds</span>
+          <input type="number" class="t-input" id="ev-odds" placeholder="-110" style="width:120px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;">American format</span>
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">True Win % (your estimate)</span>
+          <input type="number" class="t-input" id="ev-prob" placeholder="52.4" min="0" max="100" step="0.1" style="width:120px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;">%</span>
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">Bet Amount ($)</span>
+          <input type="number" class="t-input" id="ev-stake" value="100" style="width:120px;">
+        </div>
+        <button class="t-btn" onclick="calcEV()" style="margin-top:4px;">CALCULATE EV</button>
+        <div id="ev-result" style="margin-top:14px;padding-top:12px;border-top:1px solid #0f2010;"></div>
+      </div>
+      <div class="t-sec" style="margin-top:20px;"><span>// HOW IT WORKS</span></div>
+      <div class="tl"><span class="td">FORMULA</span><span>EV = (Win% × Profit) - (Lose% × Stake)</span></div>
+      <div class="tl"><span class="td">POSITIVE</span><span class="tg">EV+ = profitable long-term</span></div>
+      <div class="tl"><span class="td">NEGATIVE</span><span class="tr">EV- = losing bet regardless of outcome</span></div>
+      <div class="tl"><span class="td">BREAK EVEN</span><span class="ty">-110 requires 52.4% win rate</span></div>
+    `
+  },
+  kelly: {
+    title: 'KELLY CRITERION',
+    render: () => `
+      <div class="t-sec"><span>// KELLY CRITERION — OPTIMAL BET SIZING</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;max-width:480px;">
+        <div class="calc-row">
+          <span class="calc-label">Bankroll ($)</span>
+          <input type="number" class="t-input" id="k-bankroll" value="1000" style="width:140px;">
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">Your Odds</span>
+          <input type="number" class="t-input" id="k-odds" placeholder="-110" style="width:120px;">
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">True Win %</span>
+          <input type="number" class="t-input" id="k-prob" placeholder="54" min="0" max="100" step="0.1" style="width:120px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;">%</span>
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">Kelly Fraction</span>
+          <select class="t-select" id="k-frac" style="width:140px;">
+            <option value="1">Full Kelly (aggressive)</option>
+            <option value="0.5" selected>Half Kelly (standard)</option>
+            <option value="0.25">Quarter Kelly (conservative)</option>
+          </select>
+        </div>
+        <button class="t-btn" onclick="calcKelly()" style="margin-top:4px;">CALCULATE SIZE</button>
+        <div id="kelly-result" style="margin-top:14px;padding-top:12px;border-top:1px solid #0f2010;"></div>
+      </div>
+    `
+  },
+  converter: {
+    title: 'ODDS CONVERTER',
+    render: () => `
+      <div class="t-sec"><span>// ODDS CONVERTER — ENTER ANY FORMAT</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;max-width:520px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><div class="t-label">American (e.g. -110)</div><input type="text" class="t-input" id="oc-american" placeholder="-110" oninput="convertOdds('american')"></div>
+          <div><div class="t-label">Decimal (e.g. 1.91)</div><input type="text" class="t-input" id="oc-decimal" placeholder="1.91" oninput="convertOdds('decimal')"></div>
+          <div><div class="t-label">Fractional (e.g. 10/11)</div><input type="text" class="t-input" id="oc-fractional" placeholder="10/11" oninput="convertOdds('fractional')"></div>
+          <div><div class="t-label">Implied % (e.g. 52.4)</div><input type="text" class="t-input" id="oc-implied" placeholder="52.4" oninput="convertOdds('implied')"></div>
+        </div>
+        <div id="oc-result" style="margin-top:14px;padding-top:12px;border-top:1px solid #0f2010;"></div>
+      </div>
+    `
+  },
+  hedger: {
+    title: 'HEDGE CALCULATOR',
+    render: () => `
+      <div class="t-sec"><span>// HEDGE CALCULATOR</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;max-width:480px;">
+        <div class="calc-row"><span class="calc-label">Original Bet ($)</span><input type="number" class="t-input" id="h-orig-stake" value="100" style="width:120px;"></div>
+        <div class="calc-row"><span class="calc-label">Original Odds</span><input type="number" class="t-input" id="h-orig-odds" placeholder="+200" style="width:120px;"></div>
+        <div class="calc-row"><span class="calc-label">Hedge Odds</span><input type="number" class="t-input" id="h-hedge-odds" placeholder="-150" style="width:120px;"></div>
+        <div class="calc-row">
+          <span class="calc-label">Goal</span>
+          <select class="t-select" id="h-goal" style="width:200px;">
+            <option value="equal">Equal profit either side</option>
+            <option value="profit">Lock in profit</option>
+            <option value="reduce">Reduce risk by 50%</option>
+          </select>
+        </div>
+        <button class="t-btn" onclick="calcHedge()" style="margin-top:4px;">CALCULATE HEDGE</button>
+        <div id="hedge-result" style="margin-top:14px;padding-top:12px;border-top:1px solid #0f2010;"></div>
+      </div>
+    `
+  },
+  midder: {
+    title: 'MIDDLING FINDER',
+    render: () => `
+      <div class="t-sec"><span>// MIDDLING CALCULATOR</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;max-width:480px;">
+        <div class="tl" style="margin-bottom:10px;"><span class="td">INFO</span><span>Middle = win BOTH bets if final score lands between the two spreads</span></div>
+        <div class="calc-row"><span class="calc-label">Side 1: Spread</span><input type="number" class="t-input" id="m-line1" placeholder="-3" step="0.5" style="width:100px;"></div>
+        <div class="calc-row"><span class="calc-label">Side 1: Odds</span><input type="number" class="t-input" id="m-odds1" value="-110" style="width:100px;"></div>
+        <div class="calc-row"><span class="calc-label">Side 2: Spread</span><input type="number" class="t-input" id="m-line2" placeholder="-4.5" step="0.5" style="width:100px;"></div>
+        <div class="calc-row"><span class="calc-label">Side 2: Odds</span><input type="number" class="t-input" id="m-odds2" value="-110" style="width:100px;"></div>
+        <div class="calc-row"><span class="calc-label">Stake ($)</span><input type="number" class="t-input" id="m-stake" value="100" style="width:100px;"></div>
+        <button class="t-btn" onclick="calcMiddle()" style="margin-top:4px;">FIND MIDDLE</button>
+        <div id="middle-result" style="margin-top:14px;padding-top:12px;border-top:1px solid #0f2010;"></div>
+      </div>
+    `
+  },
+  arbitrage: {
+    title: 'ARBITRAGE CALCULATOR',
+    render: () => `
+      <div class="t-sec"><span>// ARBITRAGE CALCULATOR — GUARANTEED PROFIT</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;max-width:480px;">
+        <div class="calc-row"><span class="calc-label">Total Stake ($)</span><input type="number" class="t-input" id="arb-total" value="200" style="width:120px;"></div>
+        <div class="calc-row"><span class="calc-label">Book 1 Odds</span><input type="number" class="t-input" id="arb-odds1" placeholder="+110" style="width:120px;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;">Team A</span></div>
+        <div class="calc-row"><span class="calc-label">Book 2 Odds</span><input type="number" class="t-input" id="arb-odds2" placeholder="-105" style="width:120px;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;">Team B</span></div>
+        <button class="t-btn" onclick="calcArb()" style="margin-top:4px;">CALCULATE ARB</button>
+        <div id="arb-result" style="margin-top:14px;padding-top:12px;border-top:1px solid #0f2010;"></div>
+      </div>
+    `
+  },
+  devigger: {
+    title: 'LINE DE-VIGGER',
+    render: () => `
+      <div class="t-sec"><span>// DE-VIGGER — FIND FAIR VALUE</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;max-width:480px;">
+        <div class="tl" style="margin-bottom:10px;"><span class="td">INFO</span><span>Remove the book's edge to find what odds should be at 0% vig</span></div>
+        <div class="calc-row"><span class="calc-label">Side A Odds</span><input type="number" class="t-input" id="dv-side1" placeholder="-115" style="width:120px;"></div>
+        <div class="calc-row"><span class="calc-label">Side B Odds</span><input type="number" class="t-input" id="dv-side2" placeholder="-105" style="width:120px;"></div>
+        <button class="t-btn" onclick="calcDevig()" style="margin-top:4px;">REMOVE VIG</button>
+        <div id="devig-result" style="margin-top:14px;padding-top:12px;border-top:1px solid #0f2010;"></div>
+      </div>
+    `
+  },
+  correlated: {
+    title: 'CORRELATED LEG FINDER',
+    render: () => `
+      <div class="t-sec"><span>// AI CORRELATED LEG FINDER</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;margin-bottom:12px;">
+        <div class="calc-row"><span class="calc-label">Game / Matchup</span><input type="text" class="t-input" id="cor-game" placeholder="e.g. Lakers vs Celtics" style="flex:1;"></div>
+        <div class="calc-row"><span class="calc-label">Your Main Bet</span><input type="text" class="t-input" id="cor-bet" placeholder="e.g. Lakers -4.5 -110" style="flex:1;"></div>
+        <div class="calc-row"><span class="calc-label">Sport</span><select class="t-select" id="cor-sport" style="width:140px;"><option>NBA</option><option>NFL</option><option>MLB</option><option>NHL</option></select></div>
+        <button class="t-btn" onclick="findCorrelated()" style="margin-top:4px;">⚡ FIND CORRELATED LEGS</button>
+      </div>
+      <div id="cor-result"><div class="tl"><span class="td">VIC&gt;</span><span class="ta">enter a main bet to find correlated legs</span></div></div>
+    `
+  },
+  proptrend: {
+    title: 'PROP TREND FINDER',
+    render: () => `
+      <div class="t-sec"><span>// PROP TREND FINDER — AI + WEB SEARCH</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;margin-bottom:12px;">
+        <div class="calc-row">
+          <span class="calc-label">Sport</span>
+          <select class="t-select" id="pt-sport" style="width:140px;">
+            <option value="NBA">NBA</option>
+            <option value="NFL">NFL</option>
+            <option value="MLB">MLB</option>
+            <option value="NHL">NHL</option>
+          </select>
+          <select class="t-select" id="pt-market" style="width:180px;">
+            <option value="points">Points</option>
+            <option value="rebounds">Rebounds</option>
+            <option value="assists">Assists</option>
+            <option value="PRA">Points+Reb+Ast</option>
+            <option value="threes">3-Pointers</option>
+            <option value="passing yards">Pass Yards</option>
+            <option value="rushing yards">Rush Yards</option>
+            <option value="receiving yards">Rec Yards</option>
+            <option value="receptions">Receptions</option>
+            <option value="strikeouts">Strikeouts</option>
+            <option value="hits">Hits</option>
+          </select>
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">Focus (optional)</span>
+          <input type="text" class="t-input" id="pt-focus" placeholder="e.g. high-volume scorers, injury impact, pace" style="flex:1;">
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">Filter</span>
+          <select class="t-select" id="pt-filter" style="width:220px;">
+            <option value="all">All props — best edges</option>
+            <option value="over">Overs only</option>
+            <option value="under">Unders only</option>
+            <option value="injury">Injury-impacted</option>
+            <option value="pace">Pace / matchup edge</option>
+            <option value="value">Best value lines</option>
+          </select>
+        </div>
+        <button class="t-btn" onclick="runPropTrend()" style="margin-top:4px;">⚡ FIND PROP TRENDS</button>
+      </div>
+      <div id="pt-result">
+        <div class="tl"><span class="td">VIC&gt;</span><span class="ta">select sport and prop type then click FIND PROP TRENDS</span></div>
+        <div class="tl"><span class="td">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="tm">uses live odds + injury data + web search + AI model</span></div>
+      </div>
+    `
+  },
+
+  sharpmoney: {
+    title: 'SHARP MONEY TRACKER',
+    render: () => `
+      <div class="t-sec"><span>// SHARP MONEY TRACKER — DETECT PROFESSIONAL ACTION</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;margin-bottom:12px;">
+        <div class="calc-row">
+          <span class="calc-label">Sport</span>
+          <select class="t-select" id="sm-sport" style="width:140px;">
+            <option value="nba">NBA</option>
+            <option value="nfl">NFL</option>
+            <option value="mlb">MLB</option>
+            <option value="nhl">NHL</option>
+            <option value="ncaab">NCAAB</option>
+          </select>
+          <select class="t-select" id="sm-signal" style="width:220px;">
+            <option value="all">All signals</option>
+            <option value="rlm">Reverse Line Movement only</option>
+            <option value="steam">Steam moves only</option>
+            <option value="fade">Best fade spots (heavy public)</option>
+            <option value="ticket">Ticket vs money split</option>
+          </select>
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">Threshold</span>
+          <select class="t-select" id="sm-threshold" style="width:220px;">
+            <option value="60">60%+ public (standard)</option>
+            <option value="70">70%+ public (strong signal)</option>
+            <option value="80">80%+ public (extreme)</option>
+          </select>
+        </div>
+        <button class="t-btn" onclick="runSharpMoney()" style="margin-top:4px;">⚡ SCAN FOR SHARP MONEY</button>
+      </div>
+
+      <!-- Results area with 3 columns -->
+      <div id="sm-kpi" style="display:none;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#0f2010;border:1px solid #0f2010;margin-bottom:12px;">
+        <div class="t-kpi-cell"><div class="tkv" id="sm-k-games">—</div><div class="tkl">GAMES</div></div>
+        <div class="t-kpi-cell"><div class="tkv" id="sm-k-rlm" style="color:#00ff41;">—</div><div class="tkl">RLM SPOTS</div></div>
+        <div class="t-kpi-cell"><div class="tkv" id="sm-k-steam" style="color:#aa9900;">—</div><div class="tkl">STEAM MOVES</div></div>
+        <div class="t-kpi-cell"><div class="tkv" id="sm-k-fade" style="color:#cc3333;">—</div><div class="tkl">FADE SPOTS</div></div>
+      </div>
+
+      <div id="sm-result">
+        <div class="tl"><span class="td">VIC&gt;</span><span class="ta">select sport and click SCAN FOR SHARP MONEY</span></div>
+        <div class="tl"><span class="td">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="tm">pulls SAO public betting % + line movement + AI analysis</span></div>
+      </div>
+    `
+  },
+
+  scout: {
+    title: 'AI SCOUT — RESEARCH TOOL',
+    render: () => `
+      <div class="t-sec"><span>// AI SCOUT — WEB SEARCH ENABLED</span></div>
+      <div style="background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:14px;margin-bottom:12px;">
+        <div class="calc-row">
+          <span class="calc-label">Research Query</span>
+          <input type="text" class="t-input" id="scout-query" placeholder="e.g. LeBron James injury status, recent form, matchup vs Jayson Tatum" style="flex:1;" onkeydown="if(event.key==='Enter')runScout()">
+        </div>
+        <div class="calc-row">
+          <span class="calc-label">Type</span>
+          <select class="t-select" id="scout-type" style="width:200px;">
+            <option value="player">Player Research</option>
+            <option value="team">Team Form + Stats</option>
+            <option value="matchup">Head-to-Head Matchup</option>
+            <option value="trends">Betting Trends</option>
+            <option value="news">Breaking News Impact</option>
+          </select>
+        </div>
+        <button class="t-btn" onclick="runScout()" style="margin-top:4px;">⚡ SCOUT WITH WEB SEARCH</button>
+      </div>
+      <div id="scout-result"><div class="tl"><span class="td">VIC&gt;</span><span class="ta">enter a research query and click SCOUT</span></div></div>
+    `
+  }
+};
+
+let activeTool = null;
+
+function showGrid() {
+  document.getElementById('tool-grid').style.display='grid';
+  document.getElementById('tool-panel').style.display='none';
+  document.getElementById('back-btn').style.display='none';
+  activeTool = null;
+  document.querySelectorAll('.tool-card').forEach(c=>c.classList.remove('active-tool'));
+  document.querySelectorAll('#tool-nav a').forEach(a=>a.classList.remove('active-page'));
+}
+
+function openTool(key) {
+  const tool = TOOLS[key];
+  if (!tool) return;
+  activeTool = key;
+  document.getElementById('tool-grid').style.display='none';
+  const panel = document.getElementById('tool-panel');
+  panel.style.display='block';
+  panel.innerHTML=`<div class="t-sec" style="margin-bottom:12px;"><span>// ${tool.title}</span></div>${tool.render()}`;
+  document.getElementById('back-btn').style.display='inline-flex';
+  document.querySelectorAll('#tool-nav a').forEach(a=>{a.classList.toggle('active-page',a.id===`tlink-${key}`);});
+}
+
+// ── Calculator logic ──────────────────────────────────
+function americanToDecimal(odds) {
+  const o = parseFloat(odds);
+  return o > 0 ? o/100 + 1 : 100/Math.abs(o) + 1;
+}
+function decimalToAmerican(dec) {
+  return dec >= 2 ? Math.round((dec-1)*100) : Math.round(-100/(dec-1));
+}
+function impliedFromAmerican(odds) {
+  const o = parseFloat(odds);
+  return o > 0 ? 100/(o+100) : Math.abs(o)/(Math.abs(o)+100);
+}
+function resultBox(html) {
+  return `<div style="background:#030803;border:1px solid #0f2010;border-radius:2px;padding:12px;">${html}</div>`;
+}
+function kpiLine(label, value, color='#00ff41') {
+  return `<div class="tl"><span class="td" style="min-width:180px;">${label}</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:${color};font-weight:700;">${value}</span></div>`;
+}
+
+function calcEV() {
+  const odds = parseFloat(document.getElementById('ev-odds').value);
+  const prob = parseFloat(document.getElementById('ev-prob').value)/100;
+  const stake = parseFloat(document.getElementById('ev-stake').value)||100;
+  if (isNaN(odds)||isNaN(prob)) { document.getElementById('ev-result').innerHTML='<div class="tl"><span class="tr">Enter valid odds and probability</span></div>'; return; }
+  const dec = americanToDecimal(odds);
+  const profit = (dec-1)*stake;
+  const ev = (prob * profit) - ((1-prob) * stake);
+  const bookImpl = impliedFromAmerican(odds)*100;
+  const edge = (prob*100) - bookImpl;
+  const color = ev >= 0 ? '#00ff41' : '#cc3333';
+  document.getElementById('k-calc-ev').textContent = (ev>=0?'+':'')+ev.toFixed(2);
+  document.getElementById('k-calc-ev').style.color = color;
+  document.getElementById('ev-result').innerHTML = resultBox(
+    kpiLine('Expected Value', `${ev>=0?'+':''}$${ev.toFixed(2)}`, color) +
+    kpiLine('Edge vs Book', `${edge>=0?'+':''}${edge.toFixed(2)}%`, edge>=0?'#00ff41':'#cc3333') +
+    kpiLine('Book Implied %', `${bookImpl.toFixed(1)}%`, '#aacc00') +
+    kpiLine('Your True %', `${(prob*100).toFixed(1)}%`, '#2a8a2a') +
+    kpiLine('Profit if Win', `+$${profit.toFixed(2)}`, '#2a8a2a') +
+    `<div class="tl" style="margin-top:8px;border-top:1px solid #0f2010;padding-top:8px;"><span class="td">VERDICT</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${color};">${ev>=0?'✓ POSITIVE EV — SHARP BET':'✗ NEGATIVE EV — AVOID'}</span></div>`
+  );
+}
+
+function calcKelly() {
+  const bankroll = parseFloat(document.getElementById('k-bankroll').value)||1000;
+  const odds = parseFloat(document.getElementById('k-odds').value);
+  const prob = parseFloat(document.getElementById('k-prob').value)/100;
+  const frac = parseFloat(document.getElementById('k-frac').value)||0.5;
+  if (isNaN(odds)||isNaN(prob)) { document.getElementById('kelly-result').innerHTML='<div class="tl"><span class="tr">Enter valid values</span></div>'; return; }
+  const dec = americanToDecimal(odds);
+  const b = dec - 1; // net odds
+  const q = 1 - prob;
+  const kelly = (b*prob - q) / b;
+  const fracKelly = kelly * frac;
+  const betSize = Math.max(0, fracKelly * bankroll);
+  const fracName = {1:'Full Kelly',0.5:'Half Kelly',0.25:'Quarter Kelly'}[frac]||`${frac}x Kelly`;
+  document.getElementById('k-calc-kelly').textContent = betSize>0?`$${betSize.toFixed(0)}`:'NO BET';
+  document.getElementById('kelly-result').innerHTML = resultBox(
+    kpiLine('Full Kelly %', `${(kelly*100).toFixed(2)}%`, '#aacc00') +
+    kpiLine(`${fracName} %`, `${(fracKelly*100).toFixed(2)}%`, '#00ff41') +
+    kpiLine('Bet Size', betSize>0?`$${betSize.toFixed(2)} of $${bankroll}`:'DO NOT BET', betSize>0?'#00ff41':'#cc3333') +
+    kpiLine('Units', betSize>0?`${(fracKelly*100).toFixed(1)}% of bankroll`:'—', '#2a8a2a') +
+    (kelly<=0?'<div class="tl"><span class="tr">[!] Negative Kelly — no edge, do not bet</span></div>':'')
+  );
+}
+
+function convertOdds(from) {
+  let american, decimal, fractional, implied;
+  try {
+    if (from==='american') {
+      american = parseFloat(document.getElementById('oc-american').value);
+      if (isNaN(american)) return;
+      decimal = americanToDecimal(american);
+    } else if (from==='decimal') {
+      decimal = parseFloat(document.getElementById('oc-decimal').value);
+      if (isNaN(decimal)||decimal<=1) return;
+      american = decimalToAmerican(decimal);
+    } else if (from==='fractional') {
+      const frac = document.getElementById('oc-fractional').value.split('/');
+      if (frac.length!==2) return;
+      decimal = parseFloat(frac[0])/parseFloat(frac[1]) + 1;
+      if (isNaN(decimal)) return;
+      american = decimalToAmerican(decimal);
+    } else if (from==='implied') {
+      implied = parseFloat(document.getElementById('oc-implied').value)/100;
+      if (isNaN(implied)||implied<=0||implied>=1) return;
+      decimal = 1/implied;
+      american = decimalToAmerican(decimal);
+    }
+    implied = implied || 1/decimal;
+    const num = decimal - 1;
+    const fracStr = (() => { const gcd=(a,b)=>b?gcd(b,a%b):a; const n=Math.round(num*100),d=100,g=gcd(n,d); return `${n/g}/${d/g}`; })();
+    // Update all fields except the source
+    if (from!=='american')  { const el=document.getElementById('oc-american');  if(el)el.value=(american>0?'+':'')+Math.round(american); }
+    if (from!=='decimal')   { const el=document.getElementById('oc-decimal');   if(el)el.value=decimal.toFixed(3); }
+    if (from!=='fractional'){ const el=document.getElementById('oc-fractional');if(el)el.value=fracStr; }
+    if (from!=='implied')   { const el=document.getElementById('oc-implied');   if(el)el.value=(implied*100).toFixed(2); }
+    document.getElementById('k-calc-conv').textContent = (american>0?'+':'')+Math.round(american);
+    document.getElementById('oc-result').innerHTML = resultBox(
+      kpiLine('American', (american>0?'+':'')+Math.round(american), '#00ff41') +
+      kpiLine('Decimal', decimal.toFixed(4), '#aacc00') +
+      kpiLine('Fractional', fracStr, '#2a8a2a') +
+      kpiLine('Implied %', (implied*100).toFixed(3)+'%', '#2a8a2a') +
+      kpiLine('Break-even Win%', (implied*100).toFixed(2)+'%', '#1e4a1e')
+    );
+  } catch(e) {}
+}
+
+function calcHedge() {
+  const origStake = parseFloat(document.getElementById('h-orig-stake').value)||100;
+  const origOdds  = parseFloat(document.getElementById('h-orig-odds').value);
+  const hedgeOdds = parseFloat(document.getElementById('h-hedge-odds').value);
+  const goal      = document.getElementById('h-goal').value;
+  if (isNaN(origOdds)||isNaN(hedgeOdds)) { document.getElementById('hedge-result').innerHTML='<div class="tl"><span class="tr">Enter valid odds</span></div>'; return; }
+  const origDec  = americanToDecimal(origOdds);
+  const hedgeDec = americanToDecimal(hedgeOdds);
+  const origPayout = origStake * origDec;
+  let hedgeStake;
+  if (goal==='equal') {
+    hedgeStake = origPayout / hedgeDec;
+  } else if (goal==='profit') {
+    hedgeStake = (origPayout - origStake) / hedgeDec;
+  } else {
+    hedgeStake = origStake * 0.5;
+  }
+  const profitIfOrig  = origPayout - origStake - hedgeStake;
+  const profitIfHedge = hedgeStake*(hedgeDec-1) - origStake;
+  document.getElementById('hedge-result').innerHTML = resultBox(
+    kpiLine('Hedge Bet Size', `$${hedgeStake.toFixed(2)}`, '#00ff41') +
+    kpiLine('Profit if Orig Wins', `$${profitIfOrig.toFixed(2)}`, profitIfOrig>=0?'#00ff41':'#cc3333') +
+    kpiLine('Profit if Hedge Wins', `$${profitIfHedge.toFixed(2)}`, profitIfHedge>=0?'#00ff41':'#cc3333') +
+    kpiLine('Total Staked', `$${(origStake+hedgeStake).toFixed(2)}`, '#aacc00')
+  );
+}
+
+function calcMiddle() {
+  const line1 = parseFloat(document.getElementById('m-line1').value);
+  const odds1 = parseFloat(document.getElementById('m-odds1').value);
+  const line2 = parseFloat(document.getElementById('m-line2').value);
+  const odds2 = parseFloat(document.getElementById('m-odds2').value);
+  const stake = parseFloat(document.getElementById('m-stake').value)||100;
+  if ([line1,odds1,line2,odds2].some(isNaN)) { document.getElementById('middle-result').innerHTML='<div class="tl"><span class="tr">Enter all values</span></div>'; return; }
+  const gap = Math.abs(line2-line1);
+  const dec1 = americanToDecimal(odds1), dec2 = americanToDecimal(odds2);
+  const stake2 = stake * dec1 / dec2;
+  const totalStaked = stake + stake2;
+  const winBoth = stake*(dec1-1) + stake2*(dec2-1);
+  const loseOne = -(Math.min(stake,stake2));
+  const arb = 1/dec1 + 1/dec2;
+  document.getElementById('middle-result').innerHTML = resultBox(
+    kpiLine('Spread Gap', `${gap} points${gap>=1.5?' ✓ MIDDLEABLE':' — tight'}`, gap>=1.5?'#00ff41':'#cc3333') +
+    kpiLine('Side 1 Stake', `$${stake.toFixed(2)}`, '#aacc00') +
+    kpiLine('Side 2 Stake', `$${stake2.toFixed(2)}`, '#aacc00') +
+    kpiLine('Win BOTH (middle)', `+$${winBoth.toFixed(2)}`, '#00ff41') +
+    kpiLine('Lose one side worst case', `$${loseOne.toFixed(2)}`, '#cc3333') +
+    kpiLine('Book overround', `${(arb*100).toFixed(1)}%`, arb<1?'#00ff41':'#2a6a2a')
+  );
+}
+
+function calcArb() {
+  const total = parseFloat(document.getElementById('arb-total').value)||200;
+  const odds1 = parseFloat(document.getElementById('arb-odds1').value);
+  const odds2 = parseFloat(document.getElementById('arb-odds2').value);
+  if (isNaN(odds1)||isNaN(odds2)) { document.getElementById('arb-result').innerHTML='<div class="tl"><span class="tr">Enter both odds</span></div>'; return; }
+  const dec1 = americanToDecimal(odds1), dec2 = americanToDecimal(odds2);
+  const impl1 = 1/dec1, impl2 = 1/dec2;
+  const arb = impl1 + impl2;
+  const isArb = arb < 1;
+  const stake1 = total * (impl1/arb);
+  const stake2 = total * (impl2/arb);
+  const profit = isArb ? (total/arb - total) : 0;
+  const color = isArb ? '#00ff41' : '#cc3333';
+  document.getElementById('arb-result').innerHTML = resultBox(
+    kpiLine('Arb Opportunity', isArb?'✓ ARB EXISTS!':'✗ NO ARB', color) +
+    kpiLine('Combined Implied %', `${(arb*100).toFixed(2)}%`, arb<1?'#00ff41':'#cc3333') +
+    kpiLine('Stake on Side 1', `$${stake1.toFixed(2)}`, '#aacc00') +
+    kpiLine('Stake on Side 2', `$${stake2.toFixed(2)}`, '#aacc00') +
+    kpiLine('Guaranteed Profit', isArb?`+$${profit.toFixed(2)}`:'No profit', color) +
+    kpiLine('ROI', isArb?`+${((profit/total)*100).toFixed(2)}%`:'0%', color)
+  );
+}
+
+function calcDevig() {
+  const odds1 = parseFloat(document.getElementById('dv-side1').value);
+  const odds2 = parseFloat(document.getElementById('dv-side2').value);
+  if (isNaN(odds1)||isNaN(odds2)) { document.getElementById('devig-result').innerHTML='<div class="tl"><span class="tr">Enter both sides</span></div>'; return; }
+  const impl1 = impliedFromAmerican(odds1), impl2 = impliedFromAmerican(odds2);
+  const vig   = (impl1 + impl2 - 1) * 100;
+  const fair1 = impl1 / (impl1+impl2), fair2 = impl2 / (impl1+impl2);
+  const fairOdds1 = decimalToAmerican(1/fair1), fairOdds2 = decimalToAmerican(1/fair2);
+  document.getElementById('devig-result').innerHTML = resultBox(
+    kpiLine('Book Vig', `${vig.toFixed(2)}%`, '#cc3333') +
+    kpiLine('Fair Odds Side A', (fairOdds1>0?'+':'')+fairOdds1, '#00ff41') +
+    kpiLine('Fair Odds Side B', (fairOdds2>0?'+':'')+fairOdds2, '#00ff41') +
+    kpiLine('True Prob Side A', `${(fair1*100).toFixed(2)}%`, '#aacc00') +
+    kpiLine('True Prob Side B', `${(fair2*100).toFixed(2)}%`, '#aacc00') +
+    `<div class="tl" style="margin-top:6px;"><span class="td">TIP</span><span>If your odds > fair odds, that's a +EV bet</span></div>`
+  );
+}
+
+async function findCorrelated() {
+  const game  = document.getElementById('cor-game').value.trim();
+  const bet   = document.getElementById('cor-bet').value.trim();
+  const sport = document.getElementById('cor-sport').value;
+  if (!game||!bet) { alert('Enter game and main bet'); return; }
+  document.getElementById('cor-result').innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">finding correlated legs with web search...</span></div>';
+  try {
+    const text = await proxyClaudeWithSearch(
+      `Sharp ${sport} betting analyst. Find 3 correlated player props or game props that POSITIVELY correlate with: "${bet}" in ${game}.\n\nFor each correlated leg:\nLEG: [exact prop]\nODDS: [estimated odds]\nCORRELATION: [WHY it correlates]\nBOOK: [where to find it]\n\nOnly strong positive correlations. Be specific.`, 800
+    );
+    document.getElementById('cor-result').innerHTML = text.split('\n').filter(l=>l.trim()).map(l=>{
+      const isKey = /^LEG:|^ODDS:|^CORRELATION:|^BOOK:/i.test(l.trim());
+      return `<div class="tl"><span class="td">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${isKey?'#00ff41':'#2a8a2a'};">${l}</span></div>`;
+    }).join('') + `<div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+    sbLog('correlated search complete','ok');
+  } catch(e) { document.getElementById('cor-result').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`; }
+}
+
+async function runScout() {
+  const query = document.getElementById('scout-query').value.trim();
+  const type  = document.getElementById('scout-type').value;
+  if (!query) { alert('Enter a research query'); return; }
+  document.getElementById('scout-result').innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">scouting with web search...</span></div>';
+  const typeCtx = {player:'Player status, stats, recent form, injury history, matchup.',team:'Team form, recent results, injuries, home/away splits, trends.',matchup:'Head-to-head history, scoring trends, key matchups, betting angles.',trends:'Recent ATS trends, totals trends, situational angles.',news:'Latest breaking news and how it impacts betting lines.'}[type]||'';
+  try {
+    const text = await proxyClaudeWithSearch(
+      `Sharp sports betting analyst. Research query: "${query}"\n\nFocus: ${typeCtx}\n\nProvide:\n1. Key facts and current status\n2. Betting implications\n3. Specific actionable bet if warranted\n\nTerminal-style output. Be specific and sharp.`, 1200
+    );
+    document.getElementById('scout-result').innerHTML = text.split('\n').filter(l=>l.trim()).map(l=>{
+      const isKey = /^[0-9]+\.|^[A-Z\s]+:/.test(l.trim());
+      return `<div class="tl"><span class="td">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${isKey?'#00ff41':'#2a8a2a'};">${l}</span></div>`;
+    }).join('') + `<div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+    sbLog('scout complete','ok');
+  } catch(e) { document.getElementById('scout-result').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`; }
+}
+
+async function runPropTrend() {
+  const sport    = document.getElementById('pt-sport').value;
+  const market   = document.getElementById('pt-market').value;
+  const focus    = document.getElementById('pt-focus').value.trim();
+  const filter   = document.getElementById('pt-filter').value;
+  const el       = document.getElementById('pt-result');
+  el.innerHTML   = '<div class="tl"><span class="td">VIC&gt;</span><span class="ta">fetching live odds + injuries with web search...</span></div>';
+
+  // Step 1: fetch live props from Odds API
+  let propsCtx = '';
+  try {
+    const sportKey = {NBA:'basketball_nba',NFL:'americanfootball_nfl',MLB:'baseball_mlb',NHL:'icehockey_nhl'}[sport]||'basketball_nba';
+    const mktKey   = {points:'player_points',rebounds:'player_rebounds',assists:'player_assists',PRA:'player_points_rebounds_assists',threes:'player_threes','passing yards':'player_pass_yds','rushing yards':'player_rush_yds','receiving yards':'player_reception_yds',receptions:'player_receptions',strikeouts:'pitcher_strikeouts',hits:'batter_hits'}[market]||'player_points';
+    const data = await proxyOdds(`sports/${sportKey}/props/`, {
+      regions:'us,us2', markets:mktKey, oddsFormat:'american',
+      bookmakers:'hardrockbet,fanduel,draftkings,betmgm'
+    });
+    if (Array.isArray(data) && data.length) {
+      // Build prop context — group by player, show best odds across books
+      const playerMap = {};
+      data.forEach(game => {
+        game.bookmakers?.forEach(book => {
+          book.markets?.forEach(mkt => {
+            mkt.outcomes?.forEach(o => {
+              const player = o.description || o.name;
+              if (!player) return;
+              const key = `${player}||${o.name}||${o.point}`;
+              if (!playerMap[key]) playerMap[key] = { player, side:o.name, line:o.point, game:`${game.away_team}@${game.home_team}`, bestOdds:o.price, bestBook:book.key };
+              else if (Math.abs(o.price) < Math.abs(playerMap[key].bestOdds)) { playerMap[key].bestOdds=o.price; playerMap[key].bestBook=book.key; }
+            });
+          });
+        });
+      });
+      const entries = Object.values(playerMap).slice(0,40);
+      propsCtx = entries.map(p=>`${p.player} ${p.side} ${p.line} ${market} (${fmtOdds(p.bestOdds)}) — ${p.game}`).join('
+');
+    }
+  } catch(e) { propsCtx = ''; }
+
+  // Step 2: fetch injuries
+  let injCtx = '';
+  try {
+    const sh = {NBA:'nba',NFL:'nfl',MLB:'mlb',NHL:'nhl'}[sport]||'nba';
+    const r  = await fetch(`${API}/api/espn/injuries/${sh}`);
+    if (r.ok) { const d = await r.json(); injCtx = d.text?.slice(0,400)||''; }
+  } catch(e) {}
+
+  // Step 3: Claude with web search
+  const filterCtx = {all:'Find the best prop edges regardless of direction.',over:'Focus on overs only.',under:'Focus on unders only.',injury:'Focus only on props impacted by injury news.',pace:'Focus on pace matchups and game-total implications for props.',value:'Find lines where the book is most off market.'}[filter]||'';
+  const focusCtx  = focus ? `Special focus: ${focus}.` : '';
+
+  const prompt = `Elite sharp ${sport} prop analyst. Analyze today's ${market} props and find the best betting edges.
+
+${filterCtx} ${focusCtx}
+
+TODAY'S AVAILABLE ${market.toUpperCase()} PROPS:
+${propsCtx || 'No props loaded — use web search to find today\'s lines.'}
+
+INJURY CONTEXT:
+${injCtx || 'Use web search for latest injury news.'}
+
+Using web search, find:
+1. Recent player performance trends (last 5 games)
+2. Defensive matchup ratings
+3. Any injury or lineup news affecting props
+
+For EACH recommended prop output EXACTLY:
+---PROP---
+PLAYER: [name]
+BET: [Over/Under] [line] [market]
+ODDS: [best odds]
+BOOK: [best book]
+TREND: [last 5 games average vs line]
+REASON: [2 sentences — specific stats + matchup]
+EDGE: [+X%]
+CONFIDENCE: [HIGH/MEDIUM/LOW]
+---END---
+
+Find 4-6 props. Only include genuine edges.`;
+
+  try {
+    const text = await proxyClaudeWithSearch(prompt, 2000);
+    // Parse and render props
+    const props = [];
+    text.split(/---PROP---/i).slice(1).forEach(block => {
+      const clean = block.split(/---END---/i)[0].trim();
+      const get   = key => { const m=clean.match(new RegExp(`^${key}:\s*(.+)`,'im')); return m?m[1].trim():''; };
+      const player=get('PLAYER'); if(!player)return;
+      props.push({ player, bet:get('BET'), odds:get('ODDS'), book:get('BOOK'), trend:get('TREND'), reason:get('REASON'), edge:get('EDGE'), confidence:get('CONFIDENCE') });
+    });
+
+    if (!props.length) {
+      el.innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;line-height:1.9;white-space:pre-wrap;">${text}</div>`;
+      return;
+    }
+
+    el.innerHTML = props.map(p => {
+      const confColor = p.confidence==='HIGH'?'#00ff41':p.confidence==='MEDIUM'?'#aacc00':'#2a6a2a';
+      const edgeColor = (parseFloat(p.edge)||0)>=0?'#00ff41':'#cc3333';
+      return `<div style="background:#050b05;border:1px solid #0f2010;border-left:3px solid ${confColor};border-radius:2px;padding:11px 14px;margin-bottom:8px;">
+        <div class="tl" style="border:none;padding:0;margin-bottom:6px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#00ff41;font-weight:700;">${p.player}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#aacc00;margin-left:8px;">${p.bet}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a6a2a;margin-left:8px;">${p.odds}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${confColor};letter-spacing:1px;margin-left:auto;">${p.confidence}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div style="background:#080e08;padding:6px 8px;text-align:center;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#aacc00;font-weight:700;">${p.odds||'—'}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#1e4a1e;margin-top:2px;letter-spacing:1px;">ODDS</div>
+          </div>
+          <div style="background:#080e08;padding:6px 8px;text-align:center;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:${edgeColor};font-weight:700;">${p.edge||'—'}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#1e4a1e;margin-top:2px;letter-spacing:1px;">EDGE</div>
+          </div>
+          <div style="background:#080e08;padding:6px 8px;text-align:center;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;font-weight:700;">${p.book||'—'}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#1e4a1e;margin-top:2px;letter-spacing:1px;">BOOK</div>
+          </div>
+        </div>
+        ${p.trend?`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#aacc00;margin-bottom:4px;">[TREND] ${p.trend}</div>`:''}
+        ${p.reason?`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a8a2a;line-height:1.7;padding:7px 9px;background:#080e08;border-left:2px solid #0f2010;">${p.reason}</div>`:''}
+        <div style="margin-top:6px;padding-top:5px;border-top:1px solid #0a1a0a;">
+          <button class="t-btn-ghost" style="padding:2px 9px;font-size:9px;" onclick="logPropBet('${p.player} ${p.bet}','${p.odds}')">LOG BET</button>
+        </div>
+      </div>`;
+    }).join('');
+    sbLog(`${props.length} props found (${sport} ${market})`,'ok');
+  } catch(e) {
+    el.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+    sbLog(e.message,'err');
+  }
+}
+
+async function runSharpMoney() {
+  const sport     = document.getElementById('sm-sport').value;
+  const signal    = document.getElementById('sm-signal').value;
+  const threshold = parseInt(document.getElementById('sm-threshold').value)||60;
+  const el        = document.getElementById('sm-result');
+  el.innerHTML    = `<div class="tl"><span class="td">VIC&gt;</span><span class="ta">scanning SAO for sharp money signals (${sport.toUpperCase()})...</span></div>`;
+
+  // Step 1: SAO consensus (public betting %)
+  let consensusData = [], consensusText = '';
+  try {
+    const r = await fetch(`${API}/api/sao/consensus/${sport}`);
+    const d = await r.json();
+    consensusData = d.games || [];
+    consensusText = d.text || '';
+  } catch(e) {}
+
+  // Step 2: SAO line movement
+  let movesData = [];
+  try {
+    const r = await fetch(`${API}/api/sao/line-movement/${sport}`);
+    const d = await r.json();
+    movesData = d.moves || [];
+  } catch(e) {}
+
+  // Step 3: Build signals
+  const signals = [];
+
+  consensusData.forEach(g => {
+    const bp1 = parseFloat(g.betPct1)||0;
+    const bp2 = parseFloat(g.betPct2)||0;
+    const mp1 = parseFloat(g.moneyPct1)||0;
+    const mp2 = parseFloat(g.moneyPct2)||0;
+    const game = `${g.away||g.team1||'?'} @ ${g.home||g.team2||'?'}`;
+
+    // RLM: heavy public on one side but line moved AGAINST them
+    const move = movesData.find(m => game.toLowerCase().includes((m.away||'').toLowerCase()) || game.toLowerCase().includes((m.home||'').toLowerCase()));
+    const hasRLM = move && ((bp1 > threshold && move.direction === 'down') || (bp2 > threshold && move.direction === 'up'));
+
+    // Fade: extreme public lean
+    const isFade = bp1 >= threshold || bp2 >= threshold;
+
+    // Steam: sharp line move (money % diverges significantly from bet %)
+    const moneyDiff1 = Math.abs(mp1 - bp1);
+    const moneyDiff2 = Math.abs(mp2 - bp2);
+    const isSteam = moneyDiff1 > 20 || moneyDiff2 > 20;
+
+    if (signal === 'all' || (signal === 'rlm' && hasRLM) || (signal === 'fade' && isFade) || (signal === 'steam' && isSteam) || (signal === 'ticket' && (moneyDiff1 > 10 || moneyDiff2 > 10))) {
+      const primarySignal = hasRLM ? 'RLM' : isSteam ? 'STEAM' : 'FADE';
+      const side = bp1 > bp2 ? (g.team1||g.away||'?') : (g.team2||g.home||'?');
+      const heavyPct = Math.max(bp1,bp2);
+      const heavyMoney = bp1>bp2 ? mp1 : mp2;
+      signals.push({ game, primarySignal, hasRLM, isFade, isSteam, side, heavyPct, heavyMoney, bp1, bp2, mp1, mp2, spread:g.spread||'—', move });
+    }
+  });
+
+  // Update KPIs
+  const kpiEl = document.getElementById('sm-kpi');
+  if (kpiEl) { kpiEl.style.display='grid'; }
+  document.getElementById('sm-k-games').textContent = consensusData.length||'—';
+  document.getElementById('sm-k-rlm').textContent   = signals.filter(s=>s.hasRLM).length||'—';
+  document.getElementById('sm-k-steam').textContent = signals.filter(s=>s.isSteam).length||'—';
+  document.getElementById('sm-k-fade').textContent  = signals.filter(s=>s.isFade).length||'—';
+
+  if (!signals.length && !consensusData.length) {
+    el.innerHTML = '<div class="tl"><span class="tm">no data — sport may be off-season or SAO unavailable</span></div>';
+    return;
+  }
+
+  if (!signals.length) {
+    el.innerHTML = `<div class="tl"><span class="tm">no signals at ${threshold}%+ threshold — try lowering the filter</span></div>`;
+    return;
+  }
+
+  // Render signal cards
+  const signalCards = signals.sort((a,b) => {
+    const rank = s => s.hasRLM?0:s.isSteam?1:2;
+    return rank(a)-rank(b);
+  }).map(s => {
+    const sigColor   = s.hasRLM?'#00ff41':s.isSteam?'#aa9900':'#cc3333';
+    const sigLabel   = s.hasRLM?'[RLM]':s.isSteam?'[STEAM]':'[FADE]';
+    const actionText = s.hasRLM
+      ? `SHARP: Back the ${s.side} despite public fading them`
+      : s.isSteam
+      ? `SHARP: Money is on ${s.side} despite balanced tickets`
+      : `FADE: Public heavy on ${s.side} (${s.heavyPct}% tickets vs ${s.heavyMoney}% money)`;
+    return `<div style="background:#050b05;border:1px solid #0f2010;border-left:3px solid ${sigColor};border-radius:2px;padding:11px 14px;margin-bottom:8px;">
+      <div class="tl" style="border:none;padding:0;margin-bottom:8px;">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#00cc33;font-weight:700;">${s.game}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${sigColor};letter-spacing:1px;font-weight:700;margin-left:auto;">${sigLabel}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;">
+        <div style="background:#080e08;padding:5px 7px;text-align:center;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#aacc00;font-weight:700;">${s.bp1}%</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#1e4a1e;margin-top:1px;">TICKETS A</div>
+        </div>
+        <div style="background:#080e08;padding:5px 7px;text-align:center;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#aacc00;font-weight:700;">${s.bp2}%</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#1e4a1e;margin-top:1px;">TICKETS B</div>
+        </div>
+        <div style="background:#080e08;padding:5px 7px;text-align:center;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#00ff41;font-weight:700;">${s.mp1}%</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#1e4a1e;margin-top:1px;">MONEY A</div>
+        </div>
+        <div style="background:#080e08;padding:5px 7px;text-align:center;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#00ff41;font-weight:700;">${s.mp2}%</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#1e4a1e;margin-top:1px;">MONEY B</div>
+        </div>
+      </div>
+      ${s.spread!=='—'?`<div class="tl" style="border:none;padding:2px 0;"><span class="td">SPREAD</span><span class="ty">${s.spread}</span>${s.move?`<span style="color:${sigColor};font-family:'JetBrains Mono',monospace;font-size:10px;margin-left:8px;">LINE: ${s.move.from}→${s.move.to}</span>`:''}</div>`:''}
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a8a2a;margin-top:6px;padding:7px 9px;background:#080e08;border-left:2px solid ${sigColor};">${actionText}</div>
+      <div style="margin-top:6px;padding-top:5px;border-top:1px solid #0a1a0a;">
+        <button class="t-btn-ghost" style="padding:2px 9px;font-size:9px;" onclick="logSharpBet('${s.game}','${s.primarySignal}')">LOG BET</button>
+        <button class="t-btn-ghost" style="padding:2px 9px;font-size:9px;color:#aacc00;" onclick="aiAnalyzeSignal('${s.game}','${s.primarySignal}','${s.side}')">AI DEEP DIVE</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Run AI analysis alongside the cards
+  el.innerHTML = signalCards;
+  sbLog(`${signals.length} signals found (${sport.toUpperCase()})`,'ok');
+
+  // Async AI summary
+  if (consensusText||signals.length) {
+    const aiBox = document.createElement('div');
+    aiBox.style.cssText = 'background:#020802;border:1px solid #0f2010;border-top:2px solid #00ff41;padding:12px 14px;margin-top:10px;';
+    aiBox.innerHTML = '<div class="tl"><span class="td">VIC&gt;</span><span class="ta">running sharp money AI analysis...</span></div>';
+    el.appendChild(aiBox);
+    try {
+      const ctx = consensusText || signals.map(s=>`${s.game}: tickets ${s.bp1}/${s.bp2}% money ${s.mp1}/${s.mp2}% [${s.primarySignal}]`).join('
+');
+      const text = await quickSummary(`Sharp ${sport.toUpperCase()} betting analyst. Analyze this public betting data and identify the single best sharp money play for today.
+
+${ctx}
+
+Give: 1 specific bet, the signal type, why sharps are on this side, confidence level. Terminal style, concise.`, 400);
+      aiBox.innerHTML = `<div class="t-sec" style="margin-bottom:8px;"><span>// VIC SHARP MONEY VERDICT</span></div>` +
+        text.split('
+').filter(l=>l.trim()).map(l=>`<div class="tl"><span class="td">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;">${l}</span></div>`).join('') +
+        `<div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+    } catch(e) { aiBox.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`; }
+  }
+}
+
+async function aiAnalyzeSignal(game, signal, side) {
+  const el = document.getElementById('sm-result');
+  const aiBox = document.createElement('div');
+  aiBox.style.cssText = 'background:#020802;border:1px solid #00ff41;padding:12px 14px;margin-top:10px;';
+  aiBox.innerHTML = `<div class="tl"><span class="td">VIC&gt;</span><span class="ta">deep diving ${game} ${signal}...</span></div>`;
+  el.appendChild(aiBox);
+  try {
+    const text = await proxyClaudeWithSearch(`Sharp betting analyst. Deep dive analysis on this sharp money signal:
+
+Game: ${game}
+Signal: ${signal}
+Sharp side: ${side}
+
+Using web search, analyze:
+1. Why are sharps backing ${side}?
+2. Recent line movement and timing
+3. Injury or news catalyst
+4. Historical performance of this signal type
+5. Final recommendation: bet size and line to target
+
+Be specific, sharp, actionable.`, 900);
+    aiBox.innerHTML = `<div class="t-sec" style="margin-bottom:8px;"><span>// DEEP DIVE: ${game}</span></div>` +
+      text.split('
+').filter(l=>l.trim()).map(l=>
+        `<div class="tl"><span class="td">VIC&gt;</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;">${l}</span></div>`
+      ).join('') + `<div style="margin-top:8px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#1e4a1e;">VIC&gt; </span><span class="t-cursor"></span></div>`;
+  } catch(e) { aiBox.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`; }
+  aiBox.scrollIntoView({behavior:'smooth'});
+}
+
+async function logPropBet(bet, odds) {
+  try {
+    const o = parseInt(odds.replace(/[^-+0-9]/g,''))||null;
+    await addBet({bet,odds:o,units:1,result:'pending',profit:0,sport:'PROP',betType:'Player Prop',book:'Hard Rock Bet'});
+    const toast = document.createElement('div');
+    toast.style.cssText = "position:fixed;bottom:58px;left:50%;transform:translateX(-50%);background:#003300;border:1px solid #00ff41;padding:8px 16px;border-radius:2px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#00ff41;z-index:900;white-space:nowrap;";
+    toast.innerHTML = `✓ LOGGED: ${bet.slice(0,30)} <a href="tracker.html" style="color:#00ff41;margin-left:10px;font-weight:700;">VIEW →</a>`;
+    document.body.appendChild(toast); setTimeout(()=>toast.remove(),3000);
+    sbLog('prop bet logged','ok');
+  } catch(e) { alert('Error logging: '+e.message); }
+}
+
+async function logSharpBet(game, signal) {
+  try {
+    await addBet({bet:`${signal}: ${game}`,odds:null,units:1,result:'pending',profit:0,sport:'SHARP',betType:'Sharp Signal',book:'Hard Rock Bet'});
+    const toast = document.createElement('div');
+    toast.style.cssText = "position:fixed;bottom:58px;left:50%;transform:translateX(-50%);background:#003300;border:1px solid #00ff41;padding:8px 16px;border-radius:2px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#00ff41;z-index:900;white-space:nowrap;";
+    toast.innerHTML = `✓ LOGGED: ${signal} on ${game.slice(0,25)} <a href="tracker.html" style="color:#00ff41;margin-left:10px;font-weight:700;">VIEW →</a>`;
+    document.body.appendChild(toast); setTimeout(()=>toast.remove(),3000);
+    sbLog('sharp signal logged','ok');
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy')?.classList.add('psb-ok');}}catch(e){}}
+
+// Check if tool was requested via URL param
+const urlTool = new URLSearchParams(window.location.search).get('tool');
+if (urlTool && TOOLS[urlTool]) openTool(urlTool);
+</script>
+</body>
+</html>

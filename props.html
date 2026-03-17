@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Props</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.props-tbl{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.props-tbl th{padding:6px 10px;text-align:left;color:#2a6a2a;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid #0f2010;position:sticky;top:0;background:#080e08;}
+.props-tbl td{padding:5px 10px;border-bottom:1px solid #060c06;vertical-align:middle;}
+.props-tbl tr:hover td{background:#060c06;}
+.over-row td:nth-child(3){color:#00ff41;font-weight:700;}
+.under-row td:nth-child(3){color:#cc3333;font-weight:700;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">PROPS FEED</div><div class="page-hdr-sub">Player props · multi-book · Hard Rock Bet · EV filter</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn" onclick="loadProps()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-props">—</div><div class="tkl">PROPS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-players">—</div><div class="tkl">PLAYERS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-overs" style="color:#00ff41;">—</div><div class="tkl">OVERS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-unders" style="color:#cc3333;">—</div><div class="tkl">UNDERS</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="selectSport('basketball_nba',this)">NBA</button>
+      <button class="page-tab" onclick="selectSport('americanfootball_nfl',this)">NFL</button>
+      <button class="page-tab" onclick="selectSport('baseball_mlb',this)">MLB</button>
+      <button class="page-tab" onclick="selectSport('icehockey_nhl',this)">NHL</button>
+    </div>
+    <div style="display:flex;gap:8px;padding:6px 16px;border-bottom:1px solid #0f2010;background:#050b05;flex-shrink:0;flex-wrap:wrap;">
+      <select class="t-select" id="prop-type" onchange="loadProps()" style="font-size:10px;">
+        <option value="player_points">Points</option><option value="player_rebounds">Rebounds</option>
+        <option value="player_assists">Assists</option><option value="player_threes">3-Pointers</option>
+        <option value="player_points_rebounds_assists">PRA</option>
+      </select>
+      <select class="t-select" id="prop-book" onchange="renderProps()" style="font-size:10px;">
+        <option value="hardrockbet">Hard Rock Bet</option><option value="fanduel">FanDuel</option>
+        <option value="draftkings">DraftKings</option><option value="betmgm">BetMGM</option><option value="all">All Books</option>
+      </select>
+      <select class="t-select" id="prop-side" onchange="renderProps()" style="font-size:10px;">
+        <option value="all">Both</option><option value="over">Overs Only</option><option value="under">Unders Only</option>
+      </select>
+      <input type="text" class="t-input" id="prop-search" placeholder="search player..." oninput="renderProps()" style="width:160px;font-size:10px;padding:4px 10px;">
+      <span id="k-count" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;align-self:center;margin-left:auto;"></span>
+    </div>
+    <div class="page-body" id="props-body"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading props...</span></div></div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">ODDS API</span><span id="sb-odds" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="props.html">PROPS</a>
+    <a class="psb-quicklink" href="odds.html">ODDS</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <a class="psb-quicklink" href="tracker.html">TRACKER</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('props');
+checkServerStatus();
+let currentSport='basketball_nba',propsData=[];
+loadProps();
+function selectSport(sport,el){
+  currentSport=sport;document.querySelectorAll('.page-tab').forEach(b=>b.classList.remove('active'));el.classList.add('active');
+  const propSel=document.getElementById('prop-type');
+  if(sport.includes('baseball'))propSel.innerHTML='<option value="batter_hits">Hits</option><option value="batter_home_runs">HRs</option><option value="pitcher_strikeouts">Ks</option>';
+  else if(sport.includes('hockey'))propSel.innerHTML='<option value="player_goals">Goals</option><option value="player_shots_on_goal">Shots</option><option value="player_assists">Assists</option>';
+  else if(sport.includes('football'))propSel.innerHTML='<option value="player_pass_yds">Pass Yds</option><option value="player_rush_yds">Rush Yds</option><option value="player_reception_yds">Rec Yds</option><option value="player_receptions">Receptions</option>';
+  else propSel.innerHTML='<option value="player_points">Points</option><option value="player_rebounds">Rebounds</option><option value="player_assists">Assists</option><option value="player_threes">3-Pointers</option><option value="player_points_rebounds_assists">PRA</option>';
+  loadProps();
+}
+async function loadProps(){
+  document.getElementById('props-body').innerHTML='<div class="tl"><span class="td">SYS&gt;</span><span class="ta">fetching props...</span></div>';
+  const market=document.getElementById('prop-type').value;
+  try{
+    const data=await proxyOdds(`sports/${currentSport}/props/`,{regions:'us,us2',markets:market,oddsFormat:'american',bookmakers:'hardrockbet,fanduel,draftkings,betmgm'});
+    propsData=[];
+    (Array.isArray(data)?data:[]).forEach(game=>{
+      game.bookmakers?.forEach(book=>{book.markets?.forEach(mkt=>{mkt.outcomes?.forEach(outcome=>{
+        propsData.push({player:outcome.description||outcome.name,game:`${shortTeamName(game.away_team)} @ ${shortTeamName(game.home_team)}`,market:mkt.key.replace('player_','').replace(/_/g,' ').toUpperCase(),side:outcome.name,line:outcome.point,odds:outcome.price,book:book.key,implied:toImplied(outcome.price)});
+      });});});
+    });
+    const overs=propsData.filter(p=>(p.side||'').toLowerCase().includes('over')).length;
+    const unders=propsData.filter(p=>(p.side||'').toLowerCase().includes('under')).length;
+    const players=[...new Set(propsData.map(p=>p.player))].length;
+    document.getElementById('k-props').textContent=propsData.length;
+    document.getElementById('k-players').textContent=players;
+    document.getElementById('k-overs').textContent=overs;
+    document.getElementById('k-unders').textContent=unders;
+    renderProps();sbLog(`${propsData.length} props`,'ok');
+  }catch(e){document.getElementById('props-body').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;sbLog(e.message,'err');}
+}
+function renderProps(){
+  const search=(document.getElementById('prop-search')?.value||'').toLowerCase();
+  const book=document.getElementById('prop-book').value;
+  const side=document.getElementById('prop-side').value;
+  let filtered=propsData;
+  if(search)filtered=filtered.filter(p=>(p.player||'').toLowerCase().includes(search));
+  if(book!=='all')filtered=filtered.filter(p=>p.book===book);
+  if(side==='over')filtered=filtered.filter(p=>(p.side||'').toLowerCase().includes('over'));
+  if(side==='under')filtered=filtered.filter(p=>(p.side||'').toLowerCase().includes('under'));
+  document.getElementById('k-count').textContent=`${filtered.length} props`;
+  if(!filtered.length){document.getElementById('props-body').innerHTML='<div class="tl"><span class="tm">no props — check API key</span></div>';return;}
+  document.getElementById('props-body').innerHTML=`<table class="props-tbl"><thead><tr><th>PLAYER</th><th>GAME</th><th>LINE</th><th>MARKET</th><th>SIDE</th><th>ODDS</th><th>IMPLIED%</th><th>BOOK</th></tr></thead><tbody>${filtered.slice(0,120).map(p=>{
+    const rowCls=(p.side||'').toLowerCase().includes('over')?'over-row':'under-row';
+    return `<tr class="${rowCls}"><td style="color:#00ff41;font-weight:700;white-space:nowrap;">${p.player||'—'}</td><td style="color:#1e4a1e;white-space:nowrap;">${p.game||'—'}</td><td>${p.line!==undefined?p.line:'—'}</td><td style="color:#2a6a2a;">${p.market||'—'}</td><td style="color:#aacc00;">${(p.side||'').toUpperCase()}</td><td>${p.odds?fmtOdds(p.odds):'—'}</td><td style="color:#009955;">${p.implied||'—'}%</td><td style="color:#1e4a1e;">${p.book||'—'}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){const cfg=await r.json();document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';document.getElementById('sb-odds').className=cfg.oddsKey?'psb-ok':'psb-err';document.getElementById('sb-odds').textContent=cfg.oddsKey?'KEY SET':'NO KEY';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Injuries</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.inj-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.inj-card{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:9px 12px;}
+.inj-card.out{border-left:3px solid #cc3333;}
+.inj-card.q{border-left:3px solid #aa9900;}
+.inj-card.prob{border-left:3px solid #2a8a2a;}
+.inj-name{font-family:'JetBrains Mono',monospace;font-size:12px;color:#00ff41;font-weight:700;}
+.inj-team{font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;margin-top:1px;}
+.inj-type{font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;margin-top:4px;line-height:1.5;}
+.inj-badge{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;}
+.inj-badge.out{color:#cc3333;border:1px solid #330000;background:#0f0000;}
+.inj-badge.q{color:#aa9900;border:1px solid #332200;background:#0f0800;}
+.inj-badge.prob{color:#2a8a2a;border:1px solid #003300;background:#000f00;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">INJURY REPORT</div><div class="page-hdr-sub" id="inj-sub">ESPN per-team API · SAO fallback · betting impact</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="aiImpact()">AI IMPACT</button>
+      <button class="t-btn" id="refresh-btn" onclick="loadInjuries()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-out" style="color:#cc3333;">0</div><div class="tkl">OUT</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-q" style="color:#aa9900;">0</div><div class="tkl">QUEST.</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-prob" style="color:#2a8a2a;">0</div><div class="tkl">PROBABLE</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-total">0</div><div class="tkl">TOTAL</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="selectSport('nba',this)">NBA</button>
+      <button class="page-tab" onclick="selectSport('nfl',this)">NFL</button>
+      <button class="page-tab" onclick="selectSport('mlb',this)">MLB</button>
+      <button class="page-tab" onclick="selectSport('nhl',this)">NHL</button>
+      <button class="page-tab" onclick="selectSport('ncaab',this)">NCAAB</button>
+    </div>
+    <div style="display:flex;gap:6px;padding:6px 16px;border-bottom:1px solid #0f2010;background:#050b05;flex-shrink:0;">
+      <button class="t-f-btn active" onclick="setFilter('all',this)">ALL</button>
+      <button class="t-f-btn" onclick="setFilter('out',this)">OUT</button>
+      <button class="t-f-btn" onclick="setFilter('q',this)">QUEST.</button>
+      <button class="t-f-btn" onclick="setFilter('prob',this)">PROBABLE</button>
+      <input type="text" class="t-input" id="inj-search" placeholder="search player / team..." oninput="renderCards()" style="margin-left:auto;width:180px;padding:3px 10px;font-size:10px;">
+    </div>
+    <div class="page-body" id="inj-body"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading injuries...</span></div></div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">ESPN</span><span id="sb-espn" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">SAO</span><span id="sb-sao" class="psb-val">FALLBACK</span></div>
+    <div class="psb-sec" style="margin-top:10px;">AI IMPACT</div>
+    <div id="ai-sidebar" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;line-height:1.7;padding:4px;">run AI impact →</div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="injuries.html">INJURIES</a>
+    <a class="psb-quicklink" href="news.html">INTEL</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <a class="psb-quicklink" href="analysis.html">ANALYSIS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('injuries');
+checkServerStatus();
+let currentSport='nba',allInjuries=[],activeFilter='all',injText='';
+loadInjuries();
+function selectSport(sport,el){currentSport=sport;allInjuries=[];document.querySelectorAll('.page-tab').forEach(b=>b.classList.remove('active'));el.classList.add('active');loadInjuries();}
+function setFilter(f,el){activeFilter=f;document.querySelectorAll('.t-f-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderCards();}
+async function loadInjuries(){
+  const btn=document.getElementById('refresh-btn');btn.disabled=true;btn.textContent='...';
+  document.getElementById('inj-body').innerHTML=`<div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading ${currentSport.toUpperCase()} from ESPN...</span></div>`;
+  try{
+    const r=await fetch(`${API}/api/espn/injuries/${currentSport}`);
+    const d=await r.json();let injuries=d.injuries||[];let source=d.source||'ESPN';
+    document.getElementById('sb-espn').className='psb-ok';document.getElementById('sb-espn').textContent='OK';
+    if(!injuries.length){
+      try{const r2=await fetch(`${API}/api/sao/injuries/${currentSport}`);const d2=await r2.json();if(d2.injuries?.length){injuries=d2.injuries;source='SAO';document.getElementById('sb-sao').textContent='ACTIVE';}}catch(e){}
+    }
+    document.getElementById('inj-sub').textContent=`SOURCE: ${source} · ${injuries.length} players · ${currentSport.toUpperCase()}`;
+    allInjuries=injuries;injText=d.text||injuries.map(i=>`${i.player||'?'} (${i.team||'?'}) — ${i.status||'?'}${i.injury?' — '+i.injury:''}`).join('\n');
+    document.getElementById('k-out').textContent=injuries.filter(i=>/out|ir\b/i.test(i.status||'')).length;
+    document.getElementById('k-q').textContent=injuries.filter(i=>/question|q\b|dtd/i.test(i.status||'')).length;
+    document.getElementById('k-prob').textContent=injuries.filter(i=>/probable|prob/i.test(i.status||'')).length;
+    document.getElementById('k-total').textContent=injuries.length;
+    renderCards();sbLog(`${injuries.length} players (${source})`,'ok');
+  }catch(e){document.getElementById('inj-body').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;sbLog(e.message,'err');}
+  btn.disabled=false;btn.textContent='↺ REFRESH';
+}
+function renderCards(){
+  const search=(document.getElementById('inj-search')?.value||'').toLowerCase();
+  let filtered=allInjuries;
+  if(activeFilter==='out')filtered=filtered.filter(i=>/out|ir\b/i.test(i.status||''));
+  else if(activeFilter==='q')filtered=filtered.filter(i=>/question|q\b|dtd/i.test(i.status||''));
+  else if(activeFilter==='prob')filtered=filtered.filter(i=>/probable|prob/i.test(i.status||''));
+  if(search)filtered=filtered.filter(i=>(i.player||'').toLowerCase().includes(search)||(i.team||'').toLowerCase().includes(search));
+  filtered.sort((a,b)=>{const s=i=>{const st=(i.status||'').toLowerCase();return /out|ir\b/.test(st)?0:/question|dtd/.test(st)?1:2;};return s(a)-s(b);});
+  const el=document.getElementById('inj-body');
+  if(!filtered.length){el.innerHTML='<div class="tl"><span class="tm">no players match filter</span></div>';return;}
+  el.innerHTML=`<div class="inj-grid">${filtered.map(inj=>{
+    const st=(inj.status||'').toLowerCase();
+    const cls=/out|ir\b/.test(st)?'out':/question|dtd/.test(st)?'q':'prob';
+    const bdg=/out|ir\b/.test(st)?'OUT':/question|dtd/.test(st)?'Q':'PROB';
+    return `<div class="inj-card ${cls}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
+        <div><div class="inj-name">${inj.player||'?'}</div>${inj.position?`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">${inj.position}</div>`:''}</div>
+        <span class="inj-badge ${cls}">${bdg}</span>
+      </div>
+      ${inj.team?`<div class="inj-team">${inj.team}</div>`:''}
+      ${inj.injury?`<div class="inj-type">${inj.injury}</div>`:''}
+    </div>`;
+  }).join('')}</div>`;
+}
+async function aiImpact(){
+  const sidebar=document.getElementById('ai-sidebar');sidebar.textContent='analyzing...';
+  try{
+    const text=await quickSummary(`Sharp ${currentSport.toUpperCase()} analyst. Top 3 betting edges from injuries:\n\n${injText.split('\n').slice(0,20).join('\n')}\n\nBET / REASON / DIRECTION. 1 line each.`,500);
+    sidebar.innerHTML=text.split('\n').filter(l=>l.trim()).map(l=>`<div style="margin-bottom:4px;">${l}</div>`).join('');
+  }catch(e){sidebar.textContent='Error: '+e.message;}
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

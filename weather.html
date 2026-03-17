@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Weather</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.wx-card{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:11px 14px;margin-bottom:6px;}
+.wx-card.high{border-left:3px solid #cc3333;}
+.wx-card.med{border-left:3px solid #aa9900;}
+.wx-temp{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:#00ff41;}
+.wx-cond{font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a8a2a;margin-top:2px;}
+.wx-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">WEATHER INTEL</div><div class="page-hdr-sub">Open-Meteo · outdoor stadiums · betting impact scoring</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn-ghost" onclick="aiImpact()">AI IMPACT</button>
+      <button class="t-btn" onclick="loadWeather()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-high" style="color:#cc3333;">0</div><div class="tkl">HIGH IMPACT</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-med" style="color:#aa9900;">0</div><div class="tkl">MONITOR</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-normal">0</div><div class="tkl">NORMAL</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-ts">—</div><div class="tkl">UPDATED</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchSport('nfl',this)">NFL</button>
+      <button class="page-tab" onclick="switchSport('mlb',this)">MLB</button>
+    </div>
+    <div class="page-body" id="wx-body"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading weather...</span></div></div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">OPEN-METEO</span><span id="sb-wx" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">IMPACT GUIDE</div>
+    <div class="psb-row"><span class="psb-label">WIND 20+</span><span style="color:#cc3333;">FADE TOTAL</span></div>
+    <div class="psb-row"><span class="psb-label">RAIN</span><span style="color:#aa9900;">UNDER</span></div>
+    <div class="psb-row"><span class="psb-label">COLD 35°</span><span style="color:#aa9900;">UNDER</span></div>
+    <div class="psb-sec" style="margin-top:10px;">AI NOTES</div>
+    <div id="ai-sidebar" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;line-height:1.7;padding:4px;">run AI impact →</div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="weather.html">WEATHER</a>
+    <a class="psb-quicklink" href="injuries.html">INJURIES</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('weather');
+checkServerStatus();
+const NFL_TEAMS=[
+  {team:'Buffalo Bills',lat:42.77,lon:-78.79},{team:'Kansas City Chiefs',lat:39.05,lon:-94.48},
+  {team:'New England Patriots',lat:42.09,lon:-71.26},{team:'Chicago Bears',lat:41.86,lon:-87.62},
+  {team:'Green Bay Packers',lat:44.50,lon:-88.06},{team:'Denver Broncos',lat:39.74,lon:-105.02},
+  {team:'Seattle Seahawks',lat:47.60,lon:-122.33},{team:'San Francisco 49ers',lat:37.40,lon:-121.97},
+  {team:'Pittsburgh Steelers',lat:40.44,lon:-80.01},{team:'Cleveland Browns',lat:41.50,lon:-81.70},
+  {team:'Cincinnati Bengals',lat:39.10,lon:-84.52},{team:'Baltimore Ravens',lat:39.28,lon:-76.62},
+  {team:'New York Giants',lat:40.81,lon:-74.07},{team:'New York Jets',lat:40.81,lon:-74.07},
+  {team:'Philadelphia Eagles',lat:39.90,lon:-75.17},{team:'Washington Commanders',lat:38.91,lon:-76.86},
+];
+const MLB_TEAMS=[
+  {team:'Boston Red Sox',lat:42.35,lon:-71.10},{team:'New York Yankees',lat:40.83,lon:-73.93},
+  {team:'Chicago Cubs',lat:41.95,lon:-87.66},{team:'San Francisco Giants',lat:37.78,lon:-122.39},
+  {team:'Cleveland Guardians',lat:41.50,lon:-81.69},{team:'Pittsburgh Pirates',lat:40.45,lon:-80.00},
+  {team:'Philadelphia Phillies',lat:39.91,lon:-75.17},{team:'Kansas City Royals',lat:39.05,lon:-94.48},
+  {team:'Detroit Tigers',lat:42.34,lon:-83.05},{team:'Minnesota Twins',lat:44.98,lon:-93.28},
+  {team:'Seattle Mariners',lat:47.59,lon:-122.33},{team:'Baltimore Orioles',lat:39.28,lon:-76.62},
+];
+let currentSport='nfl',wxData=[];
+function switchSport(sp,el){currentSport=sp;document.querySelectorAll('.page-tab').forEach(b=>b.classList.remove('active'));el.classList.add('active');loadWeather();}
+function wxDesc(code){if(code===0)return'CLEAR';if(code<=3)return'CLOUDY';if(code<=49)return'FOG';if(code<=69)return'RAIN';if(code<=79)return'SNOW';if(code<=99)return'STORM';return'?';}
+function wxImpact(t){return(t.wind>=25?3:t.wind>=15?1:0)+(t.temp<=20?3:t.temp<=35?2:t.temp<=45?1:0)+(t.precip>0.1?2:0);}
+async function loadWeather(){
+  const teams=currentSport==='nfl'?NFL_TEAMS:MLB_TEAMS;
+  document.getElementById('wx-body').innerHTML='<div class="tl"><span class="td">SYS&gt;</span><span class="ta">fetching stadium weather...</span></div>';
+  wxData=[];
+  const results=await Promise.allSettled(teams.map(async t=>{
+    const ctrl=new AbortController();const tmt=setTimeout(()=>ctrl.abort(),8000);
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${t.lat}&longitude=${t.lon}&current=temperature_2m,weathercode,wind_speed_10m,precipitation,apparent_temperature&wind_speed_unit=mph&temperature_unit=fahrenheit`,{signal:ctrl.signal});
+    clearTimeout(tmt);
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    const d=await r.json();const cur=d.current||{};
+    return {...t,temp:Math.round(cur.temperature_2m||70),feels:Math.round(cur.apparent_temperature||70),wind:Math.round(cur.wind_speed_10m||0),precip:cur.precipitation||0,code:cur.weathercode||cur.weather_code||0};
+  }));
+  wxData=results.filter(r=>r.status==='fulfilled').map(r=>r.value);
+  const failed=results.filter(r=>r.status==='rejected').length;
+  document.getElementById('sb-wx').className=failed<3?'psb-ok':'psb-warn';
+  document.getElementById('sb-wx').textContent=failed<3?`${wxData.length} OK`:`${failed} failed`;
+  const high=wxData.filter(t=>wxImpact(t)>=4).length;
+  const med=wxData.filter(t=>wxImpact(t)>=2&&wxImpact(t)<4).length;
+  const normal=wxData.filter(t=>wxImpact(t)<2).length;
+  document.getElementById('k-high').textContent=high;
+  document.getElementById('k-med').textContent=med;
+  document.getElementById('k-normal').textContent=normal;
+  document.getElementById('k-ts').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  renderWeather();sbLog(`${wxData.length} stadiums loaded`,'ok');
+}
+function renderWeather(){
+  const sorted=[...wxData].sort((a,b)=>wxImpact(b)-wxImpact(a));
+  document.getElementById('wx-body').innerHTML=`<div class="wx-grid">${sorted.map(t=>{
+    const imp=wxImpact(t);
+    const cls=imp>=4?'high':imp>=2?'med':'';
+    const sigTag=imp>=4?`<span style="color:#cc3333;font-family:'JetBrains Mono',monospace;font-size:9px;">[HIGH IMPACT]</span>`:imp>=2?`<span style="color:#aa9900;font-family:'JetBrains Mono',monospace;font-size:9px;">[MONITOR]</span>`:'';
+    return `<div class="wx-card ${cls}">
+      <div class="tl" style="border:none;padding:0;margin-bottom:6px;justify-content:space-between;">
+        <span class="tb">${shortTeamName(t.team)}</span>${sigTag}
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span class="wx-temp">${t.temp}°F</span>
+        <span class="wx-cond">${wxDesc(t.code)}</span>
+      </div>
+      <div class="tl" style="border:none;padding:3px 0 0;font-size:10px;gap:8px;">
+        <span class="td">WIND</span><span style="color:${t.wind>=20?'#cc3333':t.wind>=15?'#aa9900':'#2a8a2a'};">${t.wind}mph</span>
+        <span class="td">FEELS</span><span class="tg">${t.feels}°F</span>
+        <span class="td">PRECIP</span><span class="tg">${t.precip}"</span>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+async function aiImpact(){
+  const sidebar=document.getElementById('ai-sidebar');sidebar.textContent='analyzing...';
+  const ctx=wxData.map(t=>`${t.team}: ${t.temp}°F feels ${t.feels}°F, wind ${t.wind}mph, precip ${t.precip}", ${wxDesc(t.code)}`).join('\n');
+  try{
+    const text=await quickSummary(`Sharp ${currentSport.toUpperCase()} analyst. Top 3 weather edges:\n${ctx||'No data.'}\nFocus on high wind (15+ mph), precipitation, extreme cold. 1 bet each with direction.`,400);
+    sidebar.innerHTML=text.split('\n').filter(l=>l.trim()).map(l=>`<div style="margin-bottom:3px;">${l}</div>`).join('');
+  }catch(e){sidebar.textContent='Error: '+e.message;}
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();loadWeather();
+</script>
+</body>
+</html>

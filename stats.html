@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Stats</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">PLAYER STATS</div><div class="page-hdr-sub">ESPN league leaders · standings · team stats</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn" onclick="loadStats()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-cats">—</div><div class="tkl">CATEGORIES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-divs">—</div><div class="tkl">DIVISIONS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-teams">—</div><div class="tkl">TEAMS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-ts">—</div><div class="tkl">UPDATED</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="selectSport('nba',this)">NBA</button>
+      <button class="page-tab" onclick="selectSport('nfl',this)">NFL</button>
+      <button class="page-tab" onclick="selectSport('mlb',this)">MLB</button>
+      <button class="page-tab" onclick="selectSport('nhl',this)">NHL</button>
+    </div>
+    <div style="display:flex;background:#050b05;border-bottom:1px solid #0f2010;padding:0 16px;flex-shrink:0;">
+      <button class="page-tab active" id="sub-leaders" onclick="switchView('leaders',this)">LEADERS</button>
+      <button class="page-tab" id="sub-standings" onclick="switchView('standings',this)">STANDINGS</button>
+    </div>
+    <div class="page-body" id="stats-body"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading stats...</span></div></div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">ESPN</span><span class="psb-ok">FREE</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="stats.html">STATS</a>
+    <a class="psb-quicklink" href="news.html">INTEL</a>
+    <a class="psb-quicklink" href="injuries.html">INJURIES</a>
+    <a class="psb-quicklink" href="props.html">PROPS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('stats');
+checkServerStatus();
+let currentSport='nba',currentView='leaders',leadersData={},standingsData={};
+loadStats();
+function selectSport(sport,el){currentSport=sport;document.querySelectorAll('.page-tab:not(#sub-leaders):not(#sub-standings)').forEach(b=>b.classList.remove('active'));el.classList.add('active');loadStats();}
+function switchView(view,el){currentView=view;document.getElementById('sub-leaders').classList.remove('active');document.getElementById('sub-standings').classList.remove('active');el.classList.add('active');renderView();}
+async function loadStats(){
+  document.getElementById('stats-body').innerHTML=`<div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading ${currentSport.toUpperCase()}...</span></div>`;
+  try{
+    await Promise.all([
+      fetch(`${API}/api/espn/leaders/${currentSport}`).then(r=>r.ok?r.json():null).then(d=>{if(d)leadersData[currentSport]=d;}).catch(()=>{}),
+      fetch(`${API}/api/espn/standings/${currentSport}`).then(r=>r.ok?r.json():null).then(d=>{if(d)standingsData[currentSport]=d;}).catch(()=>{}),
+    ]);
+    document.getElementById('k-cats').textContent=leadersData[currentSport]?.categories?.length||'—';
+    document.getElementById('k-divs').textContent=standingsData[currentSport]?.standings?.length||'—';
+    document.getElementById('k-teams').textContent=standingsData[currentSport]?.standings?.flatMap(d=>d.teams||[]).length||'—';
+    document.getElementById('k-ts').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    renderView();sbLog(`${currentSport.toUpperCase()} loaded`,'ok');
+  }catch(e){document.getElementById('stats-body').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;}
+}
+function renderView(){if(currentView==='leaders')renderLeaders();else renderStandings();}
+function renderLeaders(){
+  const el=document.getElementById('stats-body');
+  const data=leadersData[currentSport];
+  if(!data?.categories?.length){el.innerHTML='<div class="tl"><span class="tm">no leaders data</span></div>';return;}
+  el.innerHTML=data.categories.slice(0,6).map(cat=>`
+    <div style="margin-bottom:16px;">
+      <div class="t-sec"><span>// ${cat.name||'?'}</span></div>
+      ${(cat.leaders||[]).slice(0,5).map((l,i)=>`<div class="tl">
+        <span class="td" style="min-width:20px;">${i+1}.</span>
+        <span class="tb" style="min-width:160px;">${l.athlete?.displayName||l.name||'?'}</span>
+        <span class="td" style="min-width:80px;">${l.team||l.athlete?.team?.abbreviation||''}</span>
+        <span style="color:#aacc00;font-weight:700;font-size:13px;">${l.value||l.displayValue||'?'}</span>
+      </div>`).join('')}
+    </div>`).join('');
+}
+function renderStandings(){
+  const el=document.getElementById('stats-body');
+  const data=standingsData[currentSport];
+  if(!data?.standings?.length){el.innerHTML='<div class="tl"><span class="tm">no standings data</span></div>';return;}
+  el.innerHTML=data.standings.map(div=>`
+    <div style="margin-bottom:16px;">
+      <div class="t-sec"><span>// ${div.name||div.division||'STANDINGS'}</span></div>
+      <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;">
+        <thead><tr>${['#','TEAM','W','L','PCT','GB'].map(h=>`<th style="padding:5px 10px;text-align:left;color:#2a6a2a;font-size:9px;letter-spacing:1.5px;border-bottom:1px solid #0f2010;">${h}</th>`).join('')}</tr></thead>
+        <tbody>${(div.teams||[]).map((t,i)=>`<tr style="border-bottom:1px solid #060c06;"><td style="padding:5px 10px;color:#1e4a1e;">${i+1}</td><td style="padding:5px 10px;color:#00cc33;font-weight:700;">${t.name||'?'}</td><td style="padding:5px 10px;color:#00ff41;">${t.wins||0}</td><td style="padding:5px 10px;color:#cc3333;">${t.losses||0}</td><td style="padding:5px 10px;color:#aacc00;">${t.pct||'—'}</td><td style="padding:5px 10px;color:#1e4a1e;">${t.gb||'—'}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>`).join('');
+}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

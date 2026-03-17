@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Alerts</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.alert-item{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:8px 12px;margin-bottom:5px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.alert-item.triggered{border-left:3px solid #00ff41;background:#020802;}
+.alert-item.watching{border-left:3px solid #aacc00;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">LINE ALERTS</div><div class="page-hdr-sub">SAO line movement monitor · auto-scan · steam detection</div></div></div>
+    <div class="page-hdr-actions">
+      <span id="scan-cd" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;"></span>
+      <button class="t-btn-ghost" onclick="addAlert()">+ ALERT</button>
+      <button class="t-btn" onclick="scanNow()">↺ SCAN</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-active" style="color:#00ff41;">0</div><div class="tkl">ACTIVE</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-triggered" style="color:#aa9900;">0</div><div class="tkl">TRIGGERED</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-moves">—</div><div class="tkl">LINE MOVES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-last">—</div><div class="tkl">LAST SCAN</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchPageTab('alerts',this)">MY ALERTS</button>
+      <button class="page-tab" onclick="switchPageTab('moves',this);loadMoves('nba',document.querySelectorAll('.t-f-btn')[0])">LINE MOVES</button>
+    </div>
+    <div class="page-body">
+      <div class="page-panel active" id="panel-alerts">
+        <div class="tl"><span class="td">VIC&gt;</span><span class="ta">no alerts — click + ALERT to set a line threshold</span></div>
+      </div>
+      <div class="page-panel" id="panel-moves">
+        <div style="display:flex;gap:4px;margin-bottom:10px;">
+          <button class="t-f-btn active" onclick="loadMoves('nba',this)">NBA</button>
+          <button class="t-f-btn" onclick="loadMoves('nfl',this)">NFL</button>
+          <button class="t-f-btn" onclick="loadMoves('mlb',this)">MLB</button>
+          <button class="t-f-btn" onclick="loadMoves('nhl',this)">NHL</button>
+        </div>
+        <div id="moves-feed"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading line movements...</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">SAO</span><span id="sb-sao" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">MOVE TYPES</div>
+    <div class="psb-row"><span class="psb-label">STEAM</span><span style="color:#aa9900;">sharp fast move</span></div>
+    <div class="psb-row"><span class="psb-label">REVERSE</span><span style="color:#00ff41;">line vs public</span></div>
+    <div class="psb-row"><span class="psb-label">DRIFT</span><span style="color:#2a6a2a;">slow book move</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink active-page" href="alerts.html">ALERTS</a>
+    <a class="psb-quicklink" href="public.html">PUBLIC %</a>
+    <a class="psb-quicklink" href="vegas.html">VEGAS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('alerts');
+checkServerStatus();
+function switchPageTab(name, el) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + name);
+  if (panel) panel.classList.add('active');
+}
+let alerts=[],scanTimer=null,countdown=300;
+load();loadMoves('nba',document.querySelector('.t-f-btn'));startCountdown();
+async function load(){
+  try{const r=await fetch(`${API}/api/alerts`);if(r.ok)alerts=await r.json();renderAlerts();updateKPIs();}catch(e){}
+}
+function updateKPIs(){
+  document.getElementById('k-active').textContent=alerts.filter(a=>a.active!==false).length;
+  document.getElementById('k-triggered').textContent=alerts.filter(a=>a.triggered).length;
+}
+function renderAlerts(){
+  const el=document.getElementById('panel-alerts');
+  if(!alerts.length){el.innerHTML='<div class="tl"><span class="td">VIC&gt;</span><span class="ta">no alerts — click + ALERT</span></div>';return;}
+  el.innerHTML=alerts.map(a=>`
+    <div class="alert-item${a.triggered?' triggered':' watching'}">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;">${a.game||a.team||'Alert'}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${a.condition||''} ${a.threshold||''} ${a.type||''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${a.triggered?'#00ff41':'#aacc00'};">${a.triggered?'[TRIGGERED]':'[WATCHING]'}</span>
+        <button class="t-btn-ghost" style="padding:2px 8px;font-size:9px;color:#cc3333;" onclick="deleteAlert(${a.id})">DEL</button>
+      </div>
+    </div>`).join('');
+}
+async function loadMoves(sport,el){
+  document.querySelectorAll('.t-f-btn').forEach(b=>b.classList.remove('active'));el?.classList.add('active');
+  const feed=document.getElementById('moves-feed');
+  feed.innerHTML=`<div class="tl"><span class="ta">scanning ${sport.toUpperCase()}...</span></div>`;
+  try{
+    const r=await fetch(`${API}/api/sao/line-movement/${sport}`);
+    const d=await r.json();const moves=d.moves||[];
+    document.getElementById('k-moves').textContent=moves.length;
+    document.getElementById('k-last').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('sb-sao').className='psb-ok';document.getElementById('sb-sao').textContent='OK';
+    if(!moves.length){feed.innerHTML='<div class="tl"><span class="tm">no significant moves</span></div>';return;}
+    feed.innerHTML=moves.map(m=>{
+      const col=m.direction==='down'?'#cc3333':'#00ff41';
+      return `<div class="tl"><span class="tb">${m.away||'?'} @ ${m.home||'?'}</span><span style="color:${col};">${m.direction==='down'?'▼':'▲'} ${m.from||'?'} → ${m.to||'?'}</span>${m.market?`<span class="td">${m.market}</span>`:''}</div>`;
+    }).join('');
+    sbLog(`${moves.length} moves (${sport.toUpperCase()})`,'ok');
+  }catch(e){feed.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;document.getElementById('sb-sao').className='psb-err';document.getElementById('sb-sao').textContent='ERROR';}
+}
+async function scanNow(){document.getElementById('k-last').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});await loadMoves('nba',document.querySelector('.t-f-btn.active')||document.querySelector('.t-f-btn'));}
+async function addAlert(){
+  const game=prompt('Game or team (e.g. "Lakers vs Nuggets"):');if(!game)return;
+  const threshold=prompt('Line threshold (e.g. "-2.5"):');if(!threshold)return;
+  const alert={id:Date.now(),game,threshold,condition:'line reaches',type:'spread',active:true,triggered:false};
+  alerts.push(alert);
+  fetch(`${API}/api/alerts`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(alert)}).catch(()=>{});
+  renderAlerts();updateKPIs();
+}
+async function deleteAlert(id){
+  if(!confirm('Delete?'))return;
+  await fetch(`${API}/api/alerts/${id}`,{method:'DELETE'}).catch(()=>{});
+  alerts=alerts.filter(a=>a.id!==id);renderAlerts();updateKPIs();
+}
+function startCountdown(){countdown=300;clearInterval(scanTimer);scanTimer=setInterval(()=>{countdown--;const m=Math.floor(countdown/60),s=countdown%60;document.getElementById('scan-cd').textContent=`NEXT: ${m}:${s.toString().padStart(2,'0')}`;if(countdown<=0){scanNow();countdown=300;}},1000);}
+function sbLog(msg,cls=''){const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;el.prepend(d);if(el.children.length>8)el.lastChild.remove();}
+async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
+sbStatus();
+</script>
+</body>
+</html>

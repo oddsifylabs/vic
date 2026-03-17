@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Live Odds</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.odds-tbl{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.odds-tbl th{padding:6px 10px;text-align:left;color:#2a6a2a;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid #0f2010;position:sticky;top:0;background:#080e08;}
+.odds-tbl td{padding:6px 10px;border-bottom:1px solid #060c06;vertical-align:middle;}
+.odds-tbl tr:hover td{background:#060c06;}
+.book-pills{display:flex;gap:4px;padding:8px 16px;border-bottom:1px solid #0f2010;flex-shrink:0;flex-wrap:wrap;background:#050b05;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div><div class="page-hdr-title">LIVE ODDS</div><div class="page-hdr-sub">Hard Rock Bet · FanDuel · DraftKings · BetMGM · spread/total/ML</div></div></div>
+    <div class="page-hdr-actions">
+      <button class="t-btn" onclick="loadOdds()">↺ REFRESH</button>
+    </div>
+  </div>
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-games">—</div><div class="tkl">GAMES</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-books">—</div><div class="tkl">BOOKS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-best-spread" style="color:#aacc00;">—</div><div class="tkl">BOOK</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-ts">—</div><div class="tkl">UPDATED</div></div>
+  </div>
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="selectSport('basketball_nba',this)">NBA</button>
+      <button class="page-tab" onclick="selectSport('americanfootball_nfl',this)">NFL</button>
+      <button class="page-tab" onclick="selectSport('baseball_mlb',this)">MLB</button>
+      <button class="page-tab" onclick="selectSport('icehockey_nhl',this)">NHL</button>
+      <button class="page-tab" onclick="selectSport('basketball_ncaab',this)">NCAAB</button>
+      <button class="page-tab" onclick="selectSport('soccer_epl',this)">EPL</button>
+      <button class="page-tab" onclick="selectSport('mma_mixed_martial_arts',this)">MMA</button>
+    </div>
+    <div class="book-pills" id="book-pills">
+      <button class="t-f-btn active" onclick="selectBook('hardrockbet',this)">🎸 HRB</button>
+      <button class="t-f-btn" onclick="selectBook('fanduel',this)">FD</button>
+      <button class="t-f-btn" onclick="selectBook('draftkings',this)">DK</button>
+      <button class="t-f-btn" onclick="selectBook('betmgm',this)">MGM</button>
+      <button class="t-f-btn" onclick="selectBook('all',this)">ALL</button>
+    </div>
+    <div class="page-body" id="odds-body">
+      <div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading odds...</span></div>
+    </div>
+  </div>
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">ODDS API</span><span id="sb-odds" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">BOOKS</div>
+    <div class="psb-row"><span class="psb-label">HRB</span><span class="psb-ok">US2</span></div>
+    <div class="psb-row"><span class="psb-label">FD</span><span class="psb-ok">US</span></div>
+    <div class="psb-row"><span class="psb-label">DK</span><span class="psb-ok">US</span></div>
+    <div class="psb-row"><span class="psb-label">MGM</span><span class="psb-ok">US</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink" href="index.html">HOME</a>
+    <a class="psb-quicklink" href="vegas.html">VEGAS</a>
+    <a class="psb-quicklink active-page" href="odds.html">ODDS</a>
+    <a class="psb-quicklink" href="props.html">PROPS</a>
+    <a class="psb-quicklink" href="picks.html">LEGS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+</div>
+</div>
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('odds');
+checkServerStatus();
+let currentSport='basketball_nba',currentBook='hardrockbet',oddsData=[];
+loadOdds();
+function selectSport(sport,el){currentSport=sport;document.querySelectorAll('.page-tab').forEach(b=>b.classList.remove('active'));el.classList.add('active');loadOdds();}
+function selectBook(book,el){currentBook=book;document.querySelectorAll('.t-f-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderOdds();}
+async function loadOdds(){
+  document.getElementById('odds-body').innerHTML='<div class="tl"><span class="td">SYS&gt;</span><span class="ta">fetching odds...</span></div>';
+  try{
+    const data=await proxyOdds(`sports/${currentSport}/odds/`,{regions:'us,us2',markets:'h2h,spreads,totals',oddsFormat:'american',bookmakers:'hardrockbet,fanduel,draftkings,betmgm'});
+    oddsData=Array.isArray(data)?data:[];
+    document.getElementById('k-games').textContent=oddsData.length||'0';
+    const books=[...new Set(oddsData.flatMap(g=>g.bookmakers?.map(b=>b.key)||[]))];
+    document.getElementById('k-books').textContent=books.length;
+    document.getElementById('k-best-spread').textContent=currentBook.toUpperCase().slice(0,3);
+    document.getElementById('k-ts').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    if(!oddsData.length){document.getElementById('odds-body').innerHTML='<div class="tl"><span class="tm">no odds — sport may be off-season</span></div>';return;}
+    renderOdds();sbLog(`${oddsData.length} games loaded`,'ok');
+  }catch(e){document.getElementById('odds-body').innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;sbLog(e.message,'err');}
+}
+function renderOdds(){
+  const body=document.getElementById('odds-body');if(!oddsData.length)return;
+  let rows='';
+  oddsData.forEach(game=>{
+    const books=currentBook==='all'?game.bookmakers:game.bookmakers?.filter(b=>b.key===currentBook);
+    if(!books?.length)return;
+    const time=new Date(game.commence_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    books.forEach(book=>{
+      const h2h=book.markets?.find(m=>m.key==='h2h');
+      const sprd=book.markets?.find(m=>m.key==='spreads');
+      const tot=book.markets?.find(m=>m.key==='totals');
+      const awayML=h2h?.outcomes?.find(o=>o.name===game.away_team)?.price;
+      const homeML=h2h?.outcomes?.find(o=>o.name===game.home_team)?.price;
+      const awaySprd=sprd?.outcomes?.find(o=>o.name===game.away_team);
+      const homeSprd=sprd?.outcomes?.find(o=>o.name===game.home_team);
+      const total=tot?.outcomes?.[0]?.point;
+      const awayO=tot?.outcomes?.find(o=>o.name==='Over')?.price;
+      rows+=`<tr>
+        <td style="color:#1e4a1e;">${time}</td>
+        <td><div style="color:#00cc33;font-weight:700;">${shortTeamName(game.away_team)}</div><div style="color:#00cc33;font-weight:700;">${shortTeamName(game.home_team)}</div></td>
+        <td><div style="color:#aacc00;">${awaySprd?`${awaySprd.point>0?'+':''}${awaySprd.point} (${fmtOdds(awaySprd.price)})`:'-'}</div><div style="color:#aacc00;">${homeSprd?`${homeSprd.point>0?'+':''}${homeSprd.point} (${fmtOdds(homeSprd.price)})`:'-'}</div></td>
+        <td><div style="color:#009955;">${total?`o${total} (${fmtOdds(awayO||0)})`:'-'}</div></td>
+        <td><div style="color:#2a6a2a;">${awayML?fmtOdds(awayML):'-'}</div><div style="color:#2a6a2a;">${homeML?fmtOdds(homeML):'-'}</div></td>
+        ${currentBook==='all'?`<td style="color:#1e4a1e;font-size:9px;">${book.key.toUpperCase().slice(0,3)}</td>`:''}
+      </tr>`;
+    });
+  });
+  const extraCol=currentBook==='all'?'<th>BOOK</th>':'';
+  body.innerHTML=`<table class="odds-tbl"><thead><tr><th>TIME</th><th>MATCHUP</th><th>SPREAD</th><th>TOTAL</th><th>ML</th>${extraCol}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+function sbLog(msg,cls=''){
+  const el=document.getElementById('sb-log');const d=document.createElement('div');d.className='psb-log'+(cls?' psb-log-'+cls:'');
+  d.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' '+msg;
+  el.prepend(d);if(el.children.length>8)el.lastChild.remove();
+}
+async function sbStatus(){
+  try{const r=await fetch(`${API}/api/config`);if(r.ok){const cfg=await r.json();document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';document.getElementById('sb-odds').className=cfg.oddsKey?'psb-ok':'psb-err';document.getElementById('sb-odds').textContent=cfg.oddsKey?'KEY SET':'NO KEY';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}
+}
+sbStatus();
+</script>
+</body>
+</html>
