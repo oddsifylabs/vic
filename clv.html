@@ -197,6 +197,35 @@ function impliedFromAmerican(o) {
 function updateSportKey() {} // placeholder — sport key resolved on fetch
 
 // ── Fetch closing odds from Odds API ──────────────────────────────────────
+
+// Extract team name from a bet description
+// Handles: "Houston Rockets ML", "Dallas Stars -1.5", "Under 5.5 LA Kings @ NJ Devils"
+// "NC State ML / -1.5 (DraftKings +110)", "Colorado Avalanche +1500 ML vs Winnipeg Jets"
+function extractTeamFromBet(bet) {
+  if (!bet) return '';
+  let b = bet.trim();
+
+  // If starts with Over/Under — it's a total, grab the team after the number
+  // "Under 5.5 Los Angeles Kings @ New Jersey Devils" → "Los Angeles Kings"
+  if (/^(over|under)/i.test(b)) {
+    // Remove "Over/Under X.X " prefix
+    b = b.replace(/^(over|under)\s+[\d.]+\s*/i, '').trim();
+  }
+
+  // Remove everything from first separator: @, vs, +, /, (, [, \ or a spread/odds pattern
+  // But keep multi-word team names like "Golden State Warriors", "Los Angeles Kings"
+  // Strategy: remove trailing odds/line/qualifiers, keep the team name
+  b = b
+    .replace(/\s*[@\/\(\[].*/g, '')     // cut at @, /, (, [
+    .replace(/\s+(ml|rl|puck line|run line|spread|alt|prop|vs\.?).*/gi, '') // cut at market type
+    .replace(/\s+[+-]\d+(\.\d+)?\s*(ml|rl|u|o)?\s*$/i, '') // trailing line like -4.5 or +1.5
+    .replace(/\s+[+-]\d{2,4}\s*$/i, '')   // trailing odds like +150 or -110
+    .replace(/\s+\d+\.\d+\s*$/i, '')      // trailing total like 5.5
+    .trim();
+
+  return b;
+}
+
 async function fetchClosingOdds() {
   const bet   = document.getElementById('m-bet').value.trim();
   const sport = document.getElementById('m-sport').value;
@@ -207,7 +236,7 @@ async function fetchClosingOdds() {
   document.getElementById('m-status').textContent = 'Fetching from Odds API…';
 
   // Extract team name from bet description
-  const teamGuess = bet.split(/[-+\s]/)[0].trim();
+  const teamGuess = extractTeamFromBet(bet);
   const sportKey  = SPORT_KEY_MAP[sport] || 'basketball_nba';
 
   try {
@@ -344,7 +373,7 @@ async function autoFillEntry(id) {
   const e = entries.find(x => x.id === id);
   if (!e) return;
   const sportKey = SPORT_KEY_MAP[e.sport] || 'basketball_nba';
-  const teamGuess = (e.bet || '').split(/[-+\s]/)[0].trim();
+  const teamGuess = extractTeamFromBet(e.bet || '');
   const btn = document.querySelector(`[onclick="autoFillEntry(${id})"]`);
   if (btn) { btn.textContent = '…'; btn.className = 'auto-btn fetching'; }
   try {
@@ -422,7 +451,7 @@ async function importBet(betId) {
   const b    = bets.find(x => x.id === betId);
   if (!b) return;
   const sportKey  = SPORT_KEY_MAP[b.sport] || 'basketball_nba';
-  const teamGuess = (b.bet || '').split(/[-+\s]/)[0].trim();
+  const teamGuess = extractTeamFromBet(b.bet || '');
   const btn = document.querySelector(`[onclick="importBet(${betId})"]`);
   if (btn) { btn.textContent = '…'; btn.className = 'auto-btn fetching'; }
 

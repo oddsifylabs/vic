@@ -221,27 +221,55 @@ app.get('/api/clv/closing/:sport/:team', async (req, res) => {
     const r   = await fetch(url);
     const games = await r.json();
 
+    // Fuzzy match helper — handles multi-word team names
+    function teamMatches(apiTeam, query) {
+      if (!apiTeam || !query) return false;
+      const a = apiTeam.toLowerCase();
+      const q = query.toLowerCase().trim();
+      if (!q || q.length < 2) return false;
+      // Exact contains
+      if (a.includes(q) || q.includes(a)) return true;
+      // Last word of API team matches any word in query (e.g. "Rockets" in "Houston Rockets ML")
+      const apiWords  = a.split(' ');
+      const queryWords = q.split(' ');
+      const apiLast   = apiWords[apiWords.length - 1];
+      // Any significant query word matches any API word
+      for (const qw of queryWords) {
+        if (qw.length < 3) continue;  // skip short words
+        for (const aw of apiWords) {
+          if (aw.length < 3) continue;
+          if (aw.includes(qw) || qw.includes(aw)) return true;
+        }
+      }
+      return false;
+    }
+
     let foundGame = null, foundOdds = null;
 
     for (const game of (Array.isArray(games) ? games : [])) {
-      const awayMatch = game.away_team?.toLowerCase().includes(team) || team.includes(game.away_team?.toLowerCase().split(' ').pop() || '');
-      const homeMatch = game.home_team?.toLowerCase().includes(team) || team.includes(game.home_team?.toLowerCase().split(' ').pop() || '');
+      const awayMatch = teamMatches(game.away_team, team);
+      const homeMatch = teamMatches(game.home_team, team);
       if (!awayMatch && !homeMatch) continue;
 
       foundGame = game;
       const side = awayMatch ? game.away_team : game.home_team;
 
-      // Find best odds across books
+      // Find best ML odds first, then spread — prefer ML for CLV
       let bestOdds = null, bestBook = null;
-      for (const book of (game.bookmakers || [])) {
-        for (const market of (book.markets || [])) {
+      // Priority: h2h (ML) first, then spreads
+      for (const marketKey of ['h2h', 'spreads']) {
+        for (const book of (game.bookmakers || [])) {
+          const market = book.markets?.find(m => m.key === marketKey);
+          if (!market) continue;
           const outcome = market.outcomes?.find(o => o.name === side);
           if (!outcome) continue;
+          // Pick tightest (closest to even) odds — most representative closing line
           if (bestOdds === null || Math.abs(outcome.price) < Math.abs(bestOdds)) {
             bestOdds = outcome.price;
             bestBook = book.key;
           }
         }
+        if (bestOdds !== null) break; // found ML, don't need spread
       }
 
       if (bestOdds !== null) {
