@@ -230,8 +230,32 @@ app.post('/api/logs/enabled', (req, res) => {
 });
 
 // Config endpoints
-app.get('/api/config', (req, res) => res.json(loadConfig()));
-app.post('/api/config', (req, res) => { saveConfig(req.body); res.json({ ok: true }); });
+const KEY_MASK = '••••••••';
+
+app.get('/api/config', (req, res) => {
+  const cfg = loadConfig();
+  // NEVER expose raw API keys — mask them so the UI can show "set" status
+  // without leaking credentials to the browser
+  const safe = { ...cfg };
+  if (safe.oddsKey) safe.oddsKey = KEY_MASK;
+  if (safe.claudeKey) safe.claudeKey = KEY_MASK;
+  res.json(safe);
+});
+
+app.post('/api/config', (req, res) => {
+  const existing = loadConfig();
+  const incoming = req.body;
+  // Merge incoming over existing, but preserve old keys if the frontend
+  // sends back the mask (user didn't change the field) or empty values
+  const merged = { ...existing, ...incoming };
+  if (incoming.oddsKey === KEY_MASK || incoming.oddsKey === undefined) merged.oddsKey = existing.oddsKey;
+  if (incoming.claudeKey === KEY_MASK || incoming.claudeKey === undefined) merged.claudeKey = existing.claudeKey;
+  // Allow explicit deletion by sending empty string
+  if (incoming.oddsKey === '') merged.oddsKey = '';
+  if (incoming.claudeKey === '') merged.claudeKey = '';
+  saveConfig(merged);
+  res.json({ ok: true });
+});
 
 // Bets endpoints
 app.get('/api/bets', (req, res) => res.json(loadBets()));
