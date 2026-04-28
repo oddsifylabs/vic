@@ -7,7 +7,7 @@ const cheerio = require('cheerio');
 
 const app = express();
 const PORT = process.env.PORT || 3747;
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const BETS_FILE = path.join(DATA_DIR, 'bets.json');
 const CLV_FILE = path.join(DATA_DIR, 'clv.json');
@@ -28,7 +28,18 @@ app.use(express.static(__dirname));
 app.get('/', (req, res) => res.redirect('/lock.html'));
 
 function loadConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { cfg = {}; }
+  // Merge Railway / env vars as overrides
+  if (process.env.ODDS_API_KEY) cfg.oddsKey = process.env.ODDS_API_KEY;
+  if (process.env.CLAUDE_API_KEY) cfg.claudeKey = process.env.CLAUDE_API_KEY;
+  if (process.env.TELEGRAM_BOT_TOKEN) cfg.telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (process.env.TELEGRAM_CHAT_ID) cfg.telegramChatId = process.env.TELEGRAM_CHAT_ID;
+  if (process.env.DEFAULT_BOOK) cfg.defaultBook = process.env.DEFAULT_BOOK;
+  if (process.env.ODDS_REGION) cfg.oddsRegion = process.env.ODDS_REGION;
+  if (process.env.UNIT_SIZE) cfg.unitSize = parseFloat(process.env.UNIT_SIZE);
+  if (process.env.LOGGING_ENABLED) cfg.loggingEnabled = process.env.LOGGING_ENABLED === 'true';
+  return cfg;
 }
 function saveConfig(cfg) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2)); }
 function loadBets() {
