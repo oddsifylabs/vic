@@ -1,0 +1,8 @@
+{
+  "oddsKey": "YOUR_ODDS_API_KEY_HERE",
+  "claudeKey": "YOUR_CLAUDE_API_KEY_HERE",
+  "defaultBook": "hardrockbet",
+  "oddsRegion": "us2",
+  "unitSize": 100,
+  "loggingEnabled": true
+}
