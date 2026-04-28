@@ -315,6 +315,26 @@ footer{border-top:1px solid var(--gdim);background:var(--s1);padding:32px 40px;
   <div class="proof-cell"><div class="proof-num" style="font-size:36px">$0.00</div><div class="proof-lbl">Data Sold — Ever</div></div>
 </div>
 
+<!-- SIGNAL OF THE DAY -->
+<section class="sec" style="padding:40px 40px 20px;">
+  <div class="reveal" style="max-width:780px;margin:0 auto;">
+    <div class="sec-label">// Signal of the Day</div>
+    <div id="sotd-card" style="background:var(--s1);border:1px solid var(--gdim);border-left:3px solid var(--g);border-radius:2px;padding:20px 24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gd);">LIVE CONTRARIAN SIGNAL</span>
+        <span id="sotd-sport" style="font-family:var(--mono);font-size:9px;color:var(--tx3);">NBA</span>
+      </div>
+      <div id="sotd-game" style="font-family:var(--display);font-size:28px;font-weight:800;color:var(--g);margin-bottom:8px;">Loading...</div>
+      <div id="sotd-reason" style="font-size:13px;color:var(--tx2);line-height:1.7;margin-bottom:12px;">Scanning today's slate for reverse line movement and public lopsidedness...</div>
+      <div style="display:flex;gap:16px;font-family:var(--mono);font-size:10px;color:var(--tx3);">
+        <span id="sotd-public">Public: —</span>
+        <span id="sotd-line">Line: —</span>
+        <span id="sotd-time">⏰ —</span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- COMPARE: THE PROBLEM -->
 <section class="sec" id="features">
   <div class="reveal">
@@ -614,6 +634,34 @@ function type() {
   }
 }
 setTimeout(type, 2500);
+
+// Signal of the Day — fetch best contrarian signal
+async function loadSOTD() {
+  try {
+    const r = await fetch('/api/signals/best/nba');
+    const d = await r.json();
+    if (d.found && d.signal) {
+      const s = d.signal;
+      document.getElementById('sotd-game').textContent = s.game;
+      document.getElementById('sotd-reason').textContent = s.reason;
+      document.getElementById('sotd-public').textContent = `📊 Public: ${s.publicAway}% / ${s.publicHome}%`;
+      document.getElementById('sotd-line').textContent = s.lineChange
+        ? `📉 Line: ${s.openLine} → ${s.currentLine}`
+        : `📉 Line: n/a`;
+      document.getElementById('sotd-time').textContent = `⏰ ${new Date(s.detectedAt).toLocaleTimeString()}`;
+      document.getElementById('sotd-sport').textContent = d.sport.toUpperCase();
+      // Color code by type
+      const colors = { contrarian:'#cc3333', rlm:'#00ff41', steam:'#aa9900', sharp_money:'#00ccff', heavy_public:'#ffaa00' };
+      document.getElementById('sotd-card').style.borderLeftColor = colors[s.type] || '#00ff41';
+    } else {
+      document.getElementById('sotd-game').textContent = 'No signals yet today';
+      document.getElementById('sotd-reason').textContent = 'Run a scan in the Signals tab to detect today\'s best contrarian spot.';
+    }
+  } catch(e) {
+    document.getElementById('sotd-game').textContent = 'VIC offline';
+  }
+}
+loadSOTD();
 </script>
 </body>
 </html>

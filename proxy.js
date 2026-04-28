@@ -3029,6 +3029,13 @@ app.get('/api/signals/v2/:sport', async (req, res) => {
       if (contrarianSignals.length > 0) saveAlerts(alerts);
     }
 
+    // Auto-send Telegram alert on contrarian signals (if configured)
+    let telegramSent = 0;
+    for (const cs of contrarianSignals) {
+      const sent = await sendTelegramAlert(cs, cfg);
+      if (sent) telegramSent++;
+    }
+
     const result = {
       sport, count: signals.length, signals, summary: counts,
       sources: {
@@ -3038,6 +3045,7 @@ app.get('/api/signals/v2/:sport', async (req, res) => {
       },
       loggedToHistory: logged,
       autoAlerts: contrarianSignals.length,
+      telegramSent,
       scrapedAt: new Date().toISOString()
     };
 
@@ -3130,4 +3138,137 @@ app.get('/api/signals/:sport', async (req, res) => {
     addLog('error', 'Signals', `${sport.toUpperCase()}`, e.message);
     res.json({ sport, count:0, signals:[], summary:{}, error:e.message, scrapedAt:new Date().toISOString() });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIGNAL OF THE DAY — best contrarian signal from today
+// GET /api/signals/best/:sport
+// ═══════════════════════════════════════════════════════════════════════════
+app.get('/api/signals/best/:sport', async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  const today = new Date().toISOString().split('T')[0];
+  const history = loadSignalHistory().filter(s => s.sport === sport && s.date === today);
+  // Prioritize: contrarian > rlm > steam > sharp_money > heavy_public
+  const priority = { contrarian:5, rlm:4, steam:3, sharp_money:2, heavy_public:1, drift:0 };
+  const best = history.sort((a, b) => (priority[b.type] || 0) - (priority[a.type] || 0))[0];
+  if (!best) {
+    // No history yet — try to fetch live signals
+    try {
+      const r = await fetch(`http://localhost:${PORT}/api/signals/${sport}`);
+      const d = await r.json();
+      const signals = d.signals || [];
+      signals.sort((a, b) => (priority[b.type] || 0) - (priority[a.type] || 0));
+      const liveBest = signals[0];
+      if (liveBest) {
+        return res.json({
+          found: true, source: 'live', sport,
+          signal: liveBest,
+          message: `Best ${sport.toUpperCase()} signal: ${liveBest.type.toUpperCase()} on ${liveBest.game}`
+        });
+      }
+    } catch(e) {}
+    return res.json({ found: false, sport, message: 'No signals detected today' });
+  }
+  res.json({
+    found: true, source: 'history', sport,
+    signal: best,
+    message: `Best ${sport.toUpperCase()} signal: ${best.type.toUpperCase()} on ${best.game}`
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CSV EXPORT — download signal history as CSV
+// GET /api/signals/export?days=&sport=&type=&outcome=
+// ═══════════════════════════════════════════════════════════════════════════
+app.get('/api/signals/export', (req, res) => {
+  let h = loadSignalHistory();
+  const sport = req.query.sport;
+  const type = req.query.type;
+  const outcome = req.query.outcome;
+  const days = parseInt(req.query.days) || 30;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  h = h.filter(s => new Date(s.detectedAt).getTime() > cutoff);
+  if (sport) h = h.filter(s => s.sport === sport);
+  if (type) h = h.filter(s => s.type === type);
+  if (outcome) h = h.filter(s => s.outcome === outcome);
+
+  const headers = ['date','sport','game','type','side','confidence','market','openLine','currentLine','lineChange','publicAway','publicHome','moneyAway','moneyHome','outcome','outcomeOdds','reason'];
+  let csv = headers.join(',') + '\n';
+  for (const s of h) {
+    const row = [
+      s.date, s.sport, `"${(s.game || '').replace(/"/g,'""')}"`, s.type, s.side, s.confidence, s.market,
+      s.openLine, s.currentLine, s.lineChange, s.publicAway, s.publicHome, s.moneyAway, s.moneyHome,
+      s.outcome, s.outcomeOdds, `"${(s.reason || '').replace(/"/g,'""')}"`
+    ];
+    csv += row.join(',') + '\n';
+  }
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="vic-signals-${new Date().toISOString().split('T')[0]}.csv"`);
+  res.send(csv);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TELEGRAM ALERTS — push contrarian signals to Telegram
+// Configure: telegramBotToken + telegramChatId in config.json
+// ═══════════════════════════════════════════════════════════════════════════
+async function sendTelegramAlert(signal, cfg) {
+  if (!cfg.telegramBotToken || !cfg.telegramChatId) return false;
+  const emoji = {
+    contrarian: '🚨', rlm: '👁', steam: '🔥',
+    sharp_money: '💸', heavy_public: '👥', drift: '📈'
+  };
+  const text = `${emoji[signal.type] || '🚨'} <b>VIC ${signal.type.toUpperCase().replace('_',' ')}</b>\n\n` +
+    `<b>${signal.game}</b>\n` +
+    `${signal.reason}\n\n` +
+    `📊 Public: ${signal.publicAway}% / ${signal.publicHome}%\n` +
+    `${signal.lineChange ? `📉 Line: ${signal.openLine} → ${signal.currentLine}\n` : ''}` +
+    `⏰ ${new Date().toLocaleTimeString()}`;
+
+  try {
+    const url = `https://api.telegram.org/bot${cfg.telegramBotToken}/sendMessage`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: cfg.telegramChatId,
+        text, parse_mode: 'HTML',
+        disable_web_page_preview: true
+      })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      addLog('info', 'Telegram', `Alert sent: ${signal.game}`, signal.type);
+      return true;
+    }
+    addLog('warn', 'Telegram', `Failed: ${d.description}`, signal.type);
+    return false;
+  } catch(e) {
+    addLog('error', 'Telegram', `Send failed`, e.message);
+    return false;
+  }
+}
+
+// POST /api/signals/telegram/test — test Telegram config
+app.post('/api/signals/telegram/test', async (req, res) => {
+  const cfg = loadConfig();
+  if (!cfg.telegramBotToken || !cfg.telegramChatId) {
+    return res.status(400).json({ ok: false, error: 'telegramBotToken and telegramChatId required in config' });
+  }
+  const ok = await sendTelegramAlert({
+    game: 'TEST @ SIGNAL', type: 'contrarian', confidence: 'high',
+    publicAway: 15, publicHome: 85, openLine: -3, currentLine: -4.5, lineChange: -1.5,
+    reason: 'This is a test alert from VIC. If you see this, Telegram is configured correctly.'
+  }, cfg);
+  res.json({ ok, message: ok ? 'Test alert sent' : 'Failed — check logs' });
+});
+
+// GET /api/signals/telegram/status — check if Telegram is configured
+app.get('/api/signals/telegram/status', (req, res) => {
+  const cfg = loadConfig();
+  res.json({
+    configured: !!(cfg.telegramBotToken && cfg.telegramChatId),
+    hasToken: !!cfg.telegramBotToken,
+    hasChatId: !!cfg.telegramChatId
+  });
 });

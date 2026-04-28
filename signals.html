@@ -52,6 +52,8 @@
       </select>
       <button class="t-btn-ghost" onclick="loadSignals()">REFRESH</button>
       <button class="t-btn" onclick="runSignalsV2()">⚡ SCAN</button>
+      <button class="t-btn-ghost" onclick="exportCSV()" title="Export signal history to CSV">📊 CSV</button>
+      <button class="t-btn-ghost" id="tg-btn" onclick="testTelegram()" title="Test Telegram alert" style="display:none;">📢 TG</button>
     </div>
   </div>
 
@@ -426,6 +428,37 @@ function sbLog(msg, cls='') {
   if (el.children.length > 10) el.lastChild.remove();
 }
 
+async function exportCSV() {
+  const days = document.getElementById('h-days')?.value || 30;
+  const sport = document.getElementById('sport-select').value;
+  const type = document.getElementById('h-type')?.value || '';
+  const outcome = document.getElementById('h-outcome')?.value || '';
+  let url = `${API}/api/signals/export?days=${days}`;
+  if (sport) url += `&sport=${sport}`;
+  if (type) url += `&type=${type}`;
+  if (outcome) url += `&outcome=${outcome}`;
+  window.open(url, '_blank');
+  sbLog('CSV export started', 'ok');
+}
+
+async function testTelegram() {
+  try {
+    const r = await fetch(`${API}/api/signals/telegram/test`, { method: 'POST' });
+    const d = await r.json();
+    sbLog(d.ok ? 'Telegram test sent' : 'Telegram test failed', d.ok ? 'ok' : 'err');
+  } catch(e) { sbLog('Telegram test error: ' + e.message, 'err'); }
+}
+
+async function checkTelegram() {
+  try {
+    const r = await fetch(`${API}/api/signals/telegram/status`);
+    const d = await r.json();
+    if (d.configured) {
+      document.getElementById('tg-btn').style.display = 'inline-block';
+    }
+  } catch(e) {}
+}
+
 async function sbStatus() {
   try {
     const r = await fetch(`${API}/api/config`);
@@ -439,6 +472,7 @@ async function sbStatus() {
   }
 }
 sbStatus();
+checkTelegram();
 loadSignals();
 </script>
 </body>
