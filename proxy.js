@@ -1156,7 +1156,7 @@ app.get('/api/sao/test', async (req, res) => {
 
 
 // Health check for Railway
-app.get('/health', (req, res) => res.json({ ok: true, version: '3.0.0', ts: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ ok: true, version: '3.0.1', ts: new Date().toISOString() }));
 
 app.listen(PORT, '0.0.0.0', () => {
   // Write startup log so logs.json is created immediately
