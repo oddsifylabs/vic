@@ -7,7 +7,7 @@ const fetch   = require('node-fetch');
 const cheerio = require('cheerio');
 
 const app = express();
-const PORT = 3747;
+const PORT = process.env.PORT || 3747;
 const DATA_DIR = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const BETS_FILE = path.join(DATA_DIR, 'bets.json');

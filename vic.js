@@ -1,5 +1,5 @@
 // VIC Shared Utilities
-const API = 'http://localhost:3747';
+const API = '';
 
 // External link opener — href is the primary mechanism,
 // window.open as backup, fallback box or prompt if both blocked
