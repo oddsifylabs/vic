@@ -3,7 +3,6 @@ const fs      = require('fs');
 const os      = require('os');
 const express = require('express');
 const cors    = require('cors');
-const fetch   = require('node-fetch');
 const cheerio = require('cheerio');
 
 const app = express();
