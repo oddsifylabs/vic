@@ -28,6 +28,9 @@
     <div class="page-tabs">
       <button class="page-tab active" onclick="switchTab('keys',this)">API KEYS</button>
       <button class="page-tab" onclick="switchTab('prefs',this)">PREFERENCES</button>
+      <button class="page-tab" onclick="switchTab('publicapi',this);renderPublicAPI()">PUBLIC API</button>
+      <button class="page-tab" onclick="switchTab('webhooks',this);renderWebhooks()">WEBHOOKS</button>
+      <button class="page-tab" onclick="switchTab('syndicate',this);renderSyndicate()">SYNDICATE</button>
       <button class="page-tab" onclick="switchTab('tests',this)">SYSTEM TESTS</button>
       <button class="page-tab" onclick="switchTab('data',this)">DATA</button>
     </div>
@@ -59,6 +62,9 @@ async function switchTab(name,el){
   currentCfgTab=name;document.querySelectorAll('.page-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
   if(name==='keys')await renderKeys();
   else if(name==='prefs')await renderPrefs();
+  else if(name==='publicapi')await renderPublicAPI();
+  else if(name==='webhooks')await renderWebhooks();
+  else if(name==='syndicate')await renderSyndicate();
   else if(name==='tests')renderTests();
   else if(name==='data')renderData();
 }
@@ -76,8 +82,18 @@ async function renderKeys(){
       </div>
       <div class="t-form-row" style="margin-bottom:16px;">
         <div class="t-label">Claude API Key <span style="color:#1e4a1e;">(AI analysis · Legs model · Ask VIC)</span></div>
-        <input type="password" class="t-input" id="claude-key" value="${cfg.claudeKey||''}" placeholder="sk-ant-api03-••••••••••••••••">
+        <input type="password" class="t-input" id="claude-key" value="${cfg.claudeKey||''}" placeholder="***••••••••••••••••">
         <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">console.anthropic.com · pay-as-you-go</div>
+      </div>
+      <div class="t-form-row" style="margin-bottom:14px;">
+        <div class="t-label">Telegram Bot Token <span style="color:#1e4a1e;">(alerts · notifications)</span></div>
+        <input type="password" class="t-input" id="tg-token" value="${cfg.telegramBotToken||''}" placeholder="123456789:ABCdef...">
+        <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">Get from @BotFather · optional</div>
+      </div>
+      <div class="t-form-row" style="margin-bottom:16px;">
+        <div class="t-label">Telegram Chat ID <span style="color:#1e4a1e;">(where alerts are sent)</span></div>
+        <input type="text" class="t-input" id="tg-chat" value="${cfg.telegramChatId||''}" placeholder="123456789">
+        <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">Get from @userinfobot · optional</div>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button class="t-btn" onclick="saveKeys()">SAVE KEYS</button>
@@ -161,6 +177,8 @@ async function saveKeys(){
   const cfg=await getConfig();
   cfg.oddsKey=document.getElementById('odds-key')?.value.trim()||cfg.oddsKey;
   cfg.claudeKey=document.getElementById('claude-key')?.value.trim()||cfg.claudeKey;
+  cfg.telegramBotToken=document.getElementById('tg-token')?.value.trim()||cfg.telegramBotToken;
+  cfg.telegramChatId=document.getElementById('tg-chat')?.value.trim()||cfg.telegramChatId;
   await saveConfig(cfg);
   const st=document.getElementById('key-status');if(st)st.innerHTML='<div class="tl"><span class="tg">[OK]</span><span>keys saved</span></div>';
   document.getElementById('k-oddskey').textContent=cfg.oddsKey?'SET':'NOT SET';document.getElementById('k-oddskey').style.color=cfg.oddsKey?'#00ff41':'#cc3333';
@@ -190,6 +208,197 @@ async function clearCache(){await fetch(`${API}/api/scrape/cache`,{method:'DELET
 function clearScans(){if(!confirm('Clear scan history?'))return;localStorage.removeItem('vic_scans');document.getElementById('data-status').textContent='[OK] scans cleared';}
 async function sbStatus(){try{const r=await fetch(`${API}/api/config`);if(r.ok){document.getElementById('sb-proxy').className='psb-ok';document.getElementById('sb-proxy').textContent='ONLINE';}}catch(e){document.getElementById('sb-proxy').className='psb-err';document.getElementById('sb-proxy').textContent='OFFLINE';}}
 sbStatus();renderKeys();
+
+// ═══ PUBLIC API ═══
+async function renderPublicAPI() {
+  const body = document.getElementById('cfg-body');
+  try {
+    const r = await fetch(`${API}/api/admin/api-keys`);
+    const keys = await r.json();
+    body.innerHTML = `
+      <div style="max-width:620px;">
+        <div class="t-sec"><span>// PUBLIC API KEYS</span></div>
+        <div style="font-size:10px;color:#2a6a2a;margin-bottom:12px;">
+          Generate API keys for external developers to query VIC signals programmatically.
+          Rate limit: 60 requests/minute per key. CORS enabled.
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" class="t-input" id="api-key-name" placeholder="Key name (e.g. 'My App')" style="flex:1;font-size:10px;">
+          <button class="t-btn" onclick="createApiKey()">GENERATE KEY</button>
+        </div>
+        <div id="api-keys-list">
+          ${keys.length ? keys.map(k => `
+            <div style="background:#050b05;border:1px solid #0f2010;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#00cc33;font-weight:700;">${k.name}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">${k.key} · ${new Date(k.createdAt).toLocaleDateString()}</div>
+              </div>
+              <button class="t-btn-ghost" style="padding:3px 10px;font-size:9px;color:#cc3333;" onclick="deleteApiKey(${k.id})">REVOKE</button>
+            </div>
+          `).join('') : '<div style="font-size:10px;color:#1e4a1e;">No API keys yet.</div>'}
+        </div>
+        <div id="api-key-status" style="margin-top:10px;font-size:10px;"></div>
+        <div class="t-sec" style="margin-top:16px;"><span>// API DOCS</span></div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2a6a2a;line-height:1.9;">
+          <div>GET /public-api — API documentation</div>
+          <div>GET /public-api/signals/:sport — Live signals</div>
+          <div>GET /public-api/signals/best/:sport — Best signal</div>
+          <div>GET /public-api/odds/:sport — Live odds</div>
+          <div>GET /public-api/public-betting/:sport — Consensus %</div>
+          <div>GET /public-api/injuries/:sport — Injury reports</div>
+        </div>
+        <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">
+          Header: <span style="color:#00ff41;">X-API-Key: vic_xxxxxxxx</span>
+        </div>
+      </div>`;
+  } catch(e) {
+    body.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+  }
+}
+async function createApiKey() {
+  const name = document.getElementById('api-key-name').value.trim();
+  if (!name) return;
+  try {
+    const r = await fetch(`${API}/api/admin/api-keys`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+    const d = await r.json();
+    const status = document.getElementById('api-key-status');
+    if (d.ok) {
+      status.innerHTML = `<span style="color:#00ff41;">[OK] Key created: ${d.key}</span> <button class="t-btn-ghost" style="padding:2px 8px;font-size:9px;" onclick="navigator.clipboard.writeText('${d.key}')">COPY</button>`;
+      renderPublicAPI();
+    } else {
+      status.innerHTML = `<span style="color:#cc3333;">[ER] ${d.error}</span>`;
+    }
+  } catch(e) {
+    document.getElementById('api-key-status').innerHTML = `<span style="color:#cc3333;">[ER] ${e.message}</span>`;
+  }
+}
+async function deleteApiKey(id) {
+  if (!confirm('Revoke this API key?')) return;
+  await fetch(`${API}/api/admin/api-keys/${id}`, { method: 'DELETE' });
+  renderPublicAPI();
+}
+
+// ═══ WEBHOOKS ═══
+async function renderWebhooks() {
+  const body = document.getElementById('cfg-body');
+  try {
+    const r = await fetch(`${API}/api/webhooks`);
+    const hooks = await r.json();
+    body.innerHTML = `
+      <div style="max-width:620px;">
+        <div class="t-sec"><span>// WEBHOOK SUBSCRIPTIONS</span></div>
+        <div style="font-size:10px;color:#2a6a2a;margin-bottom:12px;">
+          Subscribe to signal events. VIC will POST to your URL with HMAC-SHA256 signed payloads whenever a signal is detected.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+          <input type="text" class="t-input" id="wh-url" placeholder="https://your-app.com/webhook" style="font-size:10px;">
+          <select class="t-select" id="wh-events" multiple style="font-size:10px;height:60px;">
+            <option value="signal.all">All signals</option>
+            <option value="signal.contrarian">Contrarian only</option>
+            <option value="signal.rlm">RLM only</option>
+            <option value="signal.steam">Steam only</option>
+          </select>
+          <button class="t-btn" onclick="createWebhook()">SUBSCRIBE</button>
+        </div>
+        <div id="wh-list">
+          ${hooks.length ? hooks.map(h => `
+            <div style="background:#050b05;border:1px solid #0f2010;padding:8px 12px;margin-bottom:6px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#00cc33;font-weight:700;">${h.url}</div>
+                <div style="display:flex;gap:4px;">
+                  <button class="t-btn-ghost" style="padding:3px 10px;font-size:9px;" onclick="testWebhook(${h.id})">TEST</button>
+                  <button class="t-btn-ghost" style="padding:3px 10px;font-size:9px;color:#cc3333;" onclick="deleteWebhook(${h.id})">DELETE</button>
+                </div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-top:4px;">${h.events.join(', ')} · ${h.deliveries?.length || 0} deliveries</div>
+            </div>
+          `).join('') : '<div style="font-size:10px;color:#1e4a1e;">No webhooks yet.</div>'}
+        </div>
+        <div id="wh-status" style="margin-top:10px;font-size:10px;"></div>
+      </div>`;
+  } catch(e) {
+    body.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+  }
+}
+async function createWebhook() {
+  const url = document.getElementById('wh-url').value.trim();
+  const select = document.getElementById('wh-events');
+  const events = Array.from(select.selectedOptions).map(o => o.value);
+  if (!url || !events.length) { alert('URL and at least one event required'); return; }
+  try {
+    const r = await fetch(`${API}/api/webhooks`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ url, events }) });
+    const d = await r.json();
+    if (d.ok) { renderWebhooks(); document.getElementById('wh-status').innerHTML = `<span style="color:#00ff41;">[OK] Subscribed. Secret: ${d.secret}</span>`; }
+    else { document.getElementById('wh-status').innerHTML = `<span style="color:#cc3333;">[ER] ${d.error}</span>`; }
+  } catch(e) { document.getElementById('wh-status').innerHTML = `<span style="color:#cc3333;">[ER] ${e.message}</span>`; }
+}
+async function testWebhook(id) {
+  try {
+    const r = await fetch(`${API}/api/webhooks/${id}/test`, { method: 'POST' });
+    const d = await r.json();
+    document.getElementById('wh-status').innerHTML = `<span style="color:${d.ok?'#00ff41':'#cc3333'};">[${d.ok?'OK':'ER'}] ${d.status || d.error}</span>`;
+  } catch(e) { document.getElementById('wh-status').innerHTML = `<span style="color:#cc3333;">[ER] ${e.message}</span>`; }
+}
+async function deleteWebhook(id) {
+  if (!confirm('Delete this webhook?')) return;
+  await fetch(`${API}/api/webhooks/${id}`, { method: 'DELETE' });
+  renderWebhooks();
+}
+
+// ═══ SYNDICATE ═══
+async function renderSyndicate() {
+  const body = document.getElementById('cfg-body');
+  try {
+    const [statusR, boardR] = await Promise.all([
+      fetch(`${API}/api/syndicate/status`),
+      fetch(`${API}/api/syndicate/leaderboard?days=30`)
+    ]);
+    const status = await statusR.json();
+    const board = await boardR.json();
+    body.innerHTML = `
+      <div style="max-width:620px;">
+        <div class="t-sec"><span>// SYNDICATE MODE</span></div>
+        <div style="font-size:10px;color:#2a6a2a;margin-bottom:12px;">
+          Opt-in to anonymously share your graded signals with the VIC syndicate pool.
+          See aggregated performance across all users — no personal data is shared.
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${status.enabled?'#00ff41':'#cc3333'};font-weight:700;">
+            ${status.enabled ? 'SYNDICATE ENABLED' : 'SYNDICATE DISABLED'}
+          </div>
+          <button class="t-btn" onclick="toggleSyndicate()">${status.enabled ? 'DISABLE' : 'ENABLE'}</button>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-bottom:16px;">
+          Members: ${status.memberCount} · Shared signals: ${status.sharedSignals}
+        </div>
+        <div class="t-sec"><span>// LEADERBOARD (30 DAYS)</span></div>
+        <div style="margin-bottom:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#00cc33;font-weight:700;">
+          Overall: ${board.overall?.wins||0}W ${board.overall?.losses||0}L ${board.overall?.pushes||0}P — WR ${board.overall?.winRate||'N/A'} — ROI ${board.overall?.roi||'N/A'}
+        </div>
+        <div id="syn-leaderboard">
+          ${board.leaderboard?.length ? board.leaderboard.map((entry, i) => `
+            <div style="display:grid;grid-template-columns:30px 1fr 50px 50px 50px 60px 60px;gap:6px;padding:6px 8px;border-bottom:1px solid #060c06;align-items:center;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#1e4a1e;">#${i+1}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#00cc33;font-weight:700;">${entry.type.toUpperCase().replace('_',' ')}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#00ff41;">${entry.wins}W</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#cc3333;">${entry.losses}L</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#aacc00;">${entry.pushes}P</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;">${entry.winRate}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${(entry.roi||'').startsWith('-')?'#cc3333':'#00ff41'};">${entry.roi}</span>
+            </div>
+          `).join('') : '<div style="font-size:10px;color:#1e4a1e;">No shared signals yet.</div>'}
+        </div>
+      </div>`;
+  } catch(e) {
+    body.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+  }
+}
+async function toggleSyndicate() {
+  const r = await fetch(`${API}/api/syndicate/status`);
+  const s = await r.json();
+  await fetch(`${API}/api/syndicate/toggle`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ enabled: !s.enabled }) });
+  renderSyndicate();
+}
 </script>
 </body>
 </html>

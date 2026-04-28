@@ -3272,3 +3272,422 @@ app.get('/api/signals/telegram/status', (req, res) => {
     hasChatId: !!cfg.telegramChatId
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A) PUBLIC API — rate-limited, API-key protected, CORS-enabled
+// For devs who want to query VIC signals programmatically
+// ═══════════════════════════════════════════════════════════════════════════
+
+const API_KEYS_FILE = path.join(DATA_DIR, 'api_keys.json');
+const API_RATE_LIMIT = 60; // requests per minute per key
+const apiRateMap = new Map(); // key -> { count, resetAt }
+
+function loadApiKeys() {
+  try { return JSON.parse(fs.readFileSync(API_KEYS_FILE, 'utf8')); } catch { return []; }
+}
+function saveApiKeys(keys) { fs.writeFileSync(API_KEYS_FILE, JSON.stringify(keys, null, 2)); }
+
+function generateApiKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let key = 'vic_';
+  for (let i = 0; i < 32; i++) key += chars.charAt(Math.floor(Math.random() * chars.length));
+  return key;
+}
+
+function checkRateLimit(apiKey) {
+  const now = Date.now();
+  const entry = apiRateMap.get(apiKey);
+  if (!entry || now > entry.resetAt) {
+    apiRateMap.set(apiKey, { count: 1, resetAt: now + 60000 });
+    return true;
+  }
+  if (entry.count >= API_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
+function publicApiAuth(req, res, next) {
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey) return res.status(401).json({ error: 'Missing X-API-Key header' });
+  const keys = loadApiKeys();
+  const keyObj = keys.find(k => k.key === apiKey && k.active !== false);
+  if (!keyObj) return res.status(403).json({ error: 'Invalid or revoked API key' });
+  if (!checkRateLimit(apiKey)) {
+    return res.status(429).json({ error: 'Rate limit exceeded. 60 req/min per key.' });
+  }
+  req.apiKey = keyObj;
+  next();
+}
+
+// Public API CORS — allow any origin for /public-api/*
+app.use('/public-api', cors({ origin: '*', methods: ['GET','POST'], allowedHeaders: ['X-API-Key','Content-Type'] }));
+
+// GET /public-api — API docs
+app.get('/public-api', (req, res) => {
+  res.json({
+    name: 'VIC Public API',
+    version: '3.1.0',
+    description: 'Query VIC signals, odds, and betting intelligence programmatically.',
+    auth: 'X-API-Key header required. Generate keys in VIC Settings.',
+    rateLimit: '60 requests per minute per key',
+    endpoints: [
+      { method: 'GET',  path: '/public-api/signals/:sport',      desc: 'Live signals for sport (nba,nfl,mlb,nhl,ncaab,ncaaf)' },
+      { method: 'GET',  path: '/public-api/signals/best/:sport',   desc: 'Best signal of the day for sport' },
+      { method: 'GET',  path: '/public-api/odds/:sport',           desc: 'Live odds from The Odds API' },
+      { method: 'GET',  path: '/public-api/public-betting/:sport', desc: 'Public betting % consensus' },
+      { method: 'GET',  path: '/public-api/injuries/:sport',       desc: 'ESPN injury reports' },
+      { method: 'GET',  path: '/public-api/weather/:team',         desc: 'Stadium weather for NFL/MLB' },
+      { method: 'GET',  path: '/public-api/line-movement/:sport',  desc: 'Line movement detection' },
+      { method: 'POST', path: '/public-api/webhooks',              desc: 'Subscribe to signal webhooks (body: {url, events})' },
+    ],
+    example: {
+      curl: "curl -H 'X-API-Key: vic_xxxxxxxx' https://your-vic-url/public-api/signals/nba"
+    }
+  });
+});
+
+// GET /public-api/signals/:sport — public signal feed
+app.get('/public-api/signals/:sport', publicApiAuth, async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  try {
+    const r = await fetch(`http://localhost:${PORT}/api/signals/v2/${sport}`);
+    const d = await r.json();
+    // Strip internal-only fields
+    const clean = {
+      sport: d.sport,
+      count: d.count,
+      signals: (d.signals || []).map(s => ({
+        game: s.game, type: s.type, side: s.side, market: s.market,
+        confidence: s.confidence, publicAway: s.publicAway, publicHome: s.publicHome,
+        moneyAway: s.moneyAway, moneyHome: s.moneyHome,
+        openLine: s.openLine, currentLine: s.currentLine, lineChange: s.lineChange,
+        reason: s.reason, detectedAt: s.detectedAt
+      })),
+      summary: d.summary,
+      scrapedAt: d.scrapedAt
+    };
+    addLog('info', 'PublicAPI', `Signals ${sport.toUpperCase()}`, `key:${req.apiKey.name || 'unnamed'}`);
+    res.json(clean);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /public-api/signals/best/:sport — best single signal
+app.get('/public-api/signals/best/:sport', publicApiAuth, async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  try {
+    const r = await fetch(`http://localhost:${PORT}/api/signals/best/${sport}`);
+    const d = await r.json();
+    addLog('info', 'PublicAPI', `Best ${sport.toUpperCase()}`, `key:${req.apiKey.name || 'unnamed'}`);
+    res.json(d);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /public-api/odds/:sport — live odds
+app.get('/public-api/odds/:sport', publicApiAuth, async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  try {
+    const r = await fetch(`http://localhost:${PORT}/api/odds/${sport}`);
+    const d = await r.json();
+    addLog('info', 'PublicAPI', `Odds ${sport.toUpperCase()}`, `key:${req.apiKey.name || 'unnamed'}`);
+    res.json(d);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /public-api/public-betting/:sport
+app.get('/public-api/public-betting/:sport', publicApiAuth, async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  try {
+    const r = await fetch(`http://localhost:${PORT}/api/sao/consensus/${sport}`);
+    const d = await r.json();
+    addLog('info', 'PublicAPI', `Consensus ${sport.toUpperCase()}`, `key:${req.apiKey.name || 'unnamed'}`);
+    res.json(d);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /public-api/injuries/:sport
+app.get('/public-api/injuries/:sport', publicApiAuth, async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  try {
+    const r = await fetch(`http://localhost:${PORT}/api/espn/injuries/${sport}`);
+    const d = await r.json();
+    addLog('info', 'PublicAPI', `Injuries ${sport.toUpperCase()}`, `key:${req.apiKey.name || 'unnamed'}`);
+    res.json(d);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Internal API key management (admin-only, no auth needed since it's local)
+app.get('/api/admin/api-keys', (req, res) => {
+  const keys = loadApiKeys();
+  res.json(keys.map(k => ({ ...k, key: k.key.slice(0, 8) + '...' + k.key.slice(-4) })));
+});
+app.post('/api/admin/api-keys', (req, res) => {
+  const keys = loadApiKeys();
+  const newKey = { id: Date.now(), name: req.body.name || 'Unnamed', key: generateApiKey(), active: true, createdAt: new Date().toISOString() };
+  keys.push(newKey);
+  saveApiKeys(keys);
+  res.json({ ok: true, key: newKey.key }); // return full key once
+});
+app.delete('/api/admin/api-keys/:id', (req, res) => {
+  let keys = loadApiKeys().filter(k => k.id != req.params.id);
+  saveApiKeys(keys);
+  res.json({ ok: true });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B) SYNDICATE MODE — multi-user signal aggregation + leaderboard
+// Users opt-in to share their graded signals anonymously
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SYNDICATE_FILE = path.join(DATA_DIR, 'syndicate.json');
+
+function loadSyndicate() {
+  try { return JSON.parse(fs.readFileSync(SYNDICATE_FILE, 'utf8')); } catch { return { enabled: false, members: [], sharedSignals: [] }; }
+}
+function saveSyndicate(s) { fs.writeFileSync(SYNDICATE_FILE, JSON.stringify(s, null, 2)); }
+
+// GET /api/syndicate/status
+app.get('/api/syndicate/status', (req, res) => {
+  const syn = loadSyndicate();
+  res.json({ enabled: syn.enabled, memberCount: syn.members.length, sharedSignals: syn.sharedSignals.length });
+});
+
+// POST /api/syndicate/toggle — enable/disable syndicate mode
+app.post('/api/syndicate/toggle', (req, res) => {
+  const syn = loadSyndicate();
+  syn.enabled = req.body.enabled !== false;
+  saveSyndicate(syn);
+  addLog('info', 'Syndicate', `Syndicate ${syn.enabled ? 'enabled' : 'disabled'}`, '');
+  res.json({ ok: true, enabled: syn.enabled });
+});
+
+// POST /api/syndicate/share — share a graded signal to the syndicate pool
+app.post('/api/syndicate/share', (req, res) => {
+  const syn = loadSyndicate();
+  if (!syn.enabled) return res.status(403).json({ error: 'Syndicate mode is disabled' });
+
+  const { game, type, side, outcome, sport, date, confidence } = req.body;
+  if (!game || !type || !outcome) return res.status(400).json({ error: 'game, type, outcome required' });
+
+  const share = {
+    id: Date.now(), game, type, side, outcome, sport: sport || 'unknown',
+    date: date || new Date().toISOString().split('T')[0], confidence: confidence || 'medium',
+    sharedAt: new Date().toISOString(), fingerprint: require('crypto').createHash('sha256')
+      .update(game + type + date + outcome + Date.now()).digest('hex').slice(0, 16)
+  };
+
+  syn.sharedSignals.unshift(share);
+  if (syn.sharedSignals.length > 5000) syn.sharedSignals.splice(5000);
+  saveSyndicate(syn);
+
+  addLog('info', 'Syndicate', `Signal shared: ${game} ${type}`, outcome);
+  res.json({ ok: true, id: share.id });
+});
+
+// GET /api/syndicate/leaderboard — aggregated performance across all shared signals
+app.get('/api/syndicate/leaderboard', (req, res) => {
+  const syn = loadSyndicate();
+  const days = parseInt(req.query.days) || 30;
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+  const signals = syn.sharedSignals.filter(s => s.date >= cutoff);
+
+  const byType = {};
+  const overall = { wins: 0, losses: 0, pushes: 0 };
+
+  for (const s of signals) {
+    if (s.outcome === 'win') overall.wins++;
+    else if (s.outcome === 'loss') overall.losses++;
+    else if (s.outcome === 'push') overall.pushes++;
+
+    if (!byType[s.type]) byType[s.type] = { wins: 0, losses: 0, pushes: 0, count: 0 };
+    byType[s.type].count++;
+    if (s.outcome === 'win') byType[s.type].wins++;
+    else if (s.outcome === 'loss') byType[s.type].losses++;
+    else if (s.outcome === 'push') byType[s.type].pushes++;
+  }
+
+  const decided = overall.wins + overall.losses;
+  const result = {
+    period: `${days} days`,
+    totalSignals: signals.length,
+    overall: {
+      ...overall,
+      winRate: decided > 0 ? ((overall.wins / decided) * 100).toFixed(1) + '%' : 'N/A',
+      roi: decided > 0 ? (((overall.wins - overall.losses) / decided) * 100).toFixed(1) + '%' : 'N/A'
+    },
+    byType: {}
+  };
+
+  for (const [type, data] of Object.entries(byType)) {
+    const d = data.wins + data.losses;
+    result.byType[type] = {
+      ...data,
+      winRate: d > 0 ? ((data.wins / d) * 100).toFixed(1) + '%' : 'N/A',
+      roi: d > 0 ? (((data.wins - data.losses) / d) * 100).toFixed(1) + '%' : 'N/A'
+    };
+  }
+
+  // Sort by ROI descending
+  result.leaderboard = Object.entries(result.byType)
+    .sort((a, b) => parseFloat(b[1].roi) - parseFloat(a[1].roi))
+    .map(([type, data]) => ({ type, ...data }));
+
+  res.json(result);
+});
+
+// GET /api/syndicate/feed — recent shared signals
+app.get('/api/syndicate/feed', (req, res) => {
+  const syn = loadSyndicate();
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  res.json({
+    enabled: syn.enabled,
+    count: syn.sharedSignals.length,
+    signals: syn.sharedSignals.slice(0, limit)
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// C) WEBHOOK SYSTEM — subscriptions, HMAC signing, retry
+// Trigger external services when signals are detected
+// ═══════════════════════════════════════════════════════════════════════════
+
+const WEBHOOKS_FILE = path.join(DATA_DIR, 'webhooks.json');
+const crypto = require('crypto');
+
+function loadWebhooks() {
+  try { return JSON.parse(fs.readFileSync(WEBHOOKS_FILE, 'utf8')); } catch { return []; }
+}
+function saveWebhooks(w) { fs.writeFileSync(WEBHOOKS_FILE, JSON.stringify(w, null, 2)); }
+
+function signWebhookPayload(payload, secret) {
+  return crypto.createHmac('sha256', secret).update(JSON.stringify(payload)).digest('hex');
+}
+
+async function deliverWebhook(hook, payload) {
+  const sig = signWebhookPayload(payload, hook.secret);
+  try {
+    const r = await fetch(hook.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-VIC-Signature': sig,
+        'X-VIC-Event': payload.event,
+        'X-VIC-Delivery': payload.deliveryId
+      },
+      body: JSON.stringify(payload)
+    });
+    return { ok: r.ok, status: r.status };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// POST /api/webhooks — create subscription
+app.post('/api/webhooks', (req, res) => {
+  const { url, events, secret } = req.body;
+  if (!url || !events || !Array.isArray(events)) {
+    return res.status(400).json({ error: 'url and events[] required' });
+  }
+  const hooks = loadWebhooks();
+  const hook = {
+    id: Date.now(),
+    url,
+    events, // e.g. ['signal.contrarian', 'signal.rlm', 'signal.all']
+    secret: secret || crypto.randomBytes(16).toString('hex'),
+    active: true,
+    createdAt: new Date().toISOString(),
+    deliveries: []
+  };
+  hooks.push(hook);
+  saveWebhooks(hooks);
+  addLog('info', 'Webhook', `Subscribed ${url}`, events.join(', '));
+  res.json({ ok: true, id: hook.id, secret: hook.secret });
+});
+
+// GET /api/webhooks — list subscriptions
+app.get('/api/webhooks', (req, res) => {
+  const hooks = loadWebhooks().map(h => ({ ...h, secret: '***' }));
+  res.json(hooks);
+});
+
+// DELETE /api/webhooks/:id
+app.delete('/api/webhooks/:id', (req, res) => {
+  let hooks = loadWebhooks().filter(h => h.id != req.params.id);
+  saveWebhooks(hooks);
+  res.json({ ok: true });
+});
+
+// POST /api/webhooks/:id/test — send test payload
+app.post('/api/webhooks/:id/test', async (req, res) => {
+  const hooks = loadWebhooks();
+  const hook = hooks.find(h => h.id == req.params.id);
+  if (!hook) return res.status(404).json({ error: 'Webhook not found' });
+
+  const payload = {
+    event: 'signal.test',
+    deliveryId: `del_${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    data: {
+      game: 'TEST @ WEBHOOK',
+      type: 'contrarian',
+      confidence: 'high',
+      reason: 'This is a test webhook delivery from VIC.'
+    }
+  };
+  const result = await deliverWebhook(hook, payload);
+  hook.deliveries.unshift({ ts: new Date().toISOString(), event: 'signal.test', ...result });
+  if (hook.deliveries.length > 50) hook.deliveries.splice(50);
+  saveWebhooks(hooks);
+
+  addLog('info', 'Webhook', `Test delivery to ${hook.url}`, result.ok ? 'OK' : result.error);
+  res.json({ ok: result.ok, status: result.status, error: result.error });
+});
+
+// Internal: trigger webhooks when signals fire
+async function triggerWebhooks(eventType, signalData) {
+  const hooks = loadWebhooks().filter(h => h.active && (
+    h.events.includes(eventType) || h.events.includes('signal.all')
+  ));
+  if (!hooks.length) return;
+
+  const payload = {
+    event: eventType,
+    deliveryId: `del_${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    data: signalData
+  };
+
+  for (const hook of hooks) {
+    const result = await deliverWebhook(hook, payload);
+    hook.deliveries.unshift({ ts: new Date().toISOString(), event: eventType, ...result });
+    if (hook.deliveries.length > 50) hook.deliveries.splice(50);
+    addLog('info', 'Webhook', `Delivered ${eventType} to ${hook.url}`, result.ok ? 'OK' : result.error);
+  }
+  saveWebhooks(hooks);
+}
+
+// Wire webhooks into the v2 signal engine — middleware intercepts responses
+app.use('/api/signals/v2', (req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = function(data) {
+    // Fire webhooks async (don't block response)
+    if (data && data.signals) {
+      for (const s of data.signals) {
+        if (s.type === 'contrarian') triggerWebhooks('signal.contrarian', s).catch(() => {});
+        if (s.type === 'rlm') triggerWebhooks('signal.rlm', s).catch(() => {});
+        if (s.type === 'steam') triggerWebhooks('signal.steam', s).catch(() => {});
+      }
+    }
+    return originalJson(data);
+  };
+  next();
+});
