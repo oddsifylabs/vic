@@ -251,6 +251,7 @@ function navHTML(activePage) {
           { key:'scores',  label:'Scores',      icon:'🔴', href:'scores.html'  },
           { key:'props',   label:'Props',       icon:'🎯', href:'props.html'   },
           { key:'public',  label:'Public %',    icon:'👥', href:'public.html'  },
+          { key:'signals', label:'Signals',     icon:'🚨', href:'signals.html' },
           { key:'alerts',  label:'Alerts',      icon:'🔔', href:'alerts.html'  },
         ]
       },

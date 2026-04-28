@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VIC — Signals</title>
+<link rel="stylesheet" href="vic.css">
+<link rel="icon" href="vic_icon.jpeg">
+<style>
+.sig-card{background:#050b05;border:1px solid #0f2010;border-radius:2px;padding:10px 14px;margin-bottom:6px;transition:all .12s;}
+.sig-card:hover{border-color:#1e4a1e;}
+.sig-card.contrarian{border-left:3px solid #cc3333;}
+.sig-card.rlm{border-left:3px solid #00ff41;}
+.sig-card.steam{border-left:3px solid #aa9900;}
+.sig-card.sharp_money{border-left:3px solid #00ccff;}
+.sig-card.heavy_public{border-left:3px solid #ffaa00;}
+.sig-card.drift{border-left:3px solid #aacc00;}
+.sig-tag{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;letter-spacing:1.5px;padding:2px 8px;border-radius:2px;white-space:nowrap;}
+.tag-contrarian{color:#cc3333;border:1px solid #330000;background:#0a0000;}
+.tag-rlm{color:#00ff41;border:1px solid #003300;background:#010800;}
+.tag-steam{color:#aa9900;border:1px solid #332200;background:#0a0800;}
+.tag-sharp{color:#00ccff;border:1px solid #003344;background:#000a0a;}
+.tag-heavy{color:#ffaa00;border:1px solid #332200;background:#0a0800;}
+.tag-drift{color:#aacc00;border:1px solid #332200;background:#0a0800;}
+.grade-btn{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 8px;border-radius:2px;cursor:pointer;border:1px solid #0f2010;background:#030903;color:#2a6a2a;}
+.grade-btn:hover{border-color:#2a6a2a;color:#00cc33;}
+.grade-btn.win{background:#003300;color:#00ff41;border-color:#00ff41;}
+.grade-btn.loss{background:#330000;color:#cc3333;border-color:#cc3333;}
+.grade-btn.push{background:#333300;color:#aacc00;border-color:#aacc00;}
+.perf-row{display:grid;grid-template-columns:1.2fr 60px 60px 60px 80px 80px 60px;gap:8px;padding:7px 10px;border-bottom:1px solid #060c06;align-items:center;}
+.perf-hdr{font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;letter-spacing:1px;text-transform:uppercase;}
+.perf-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;}
+</style>
+</head>
+<body>
+<script src="vic.js"></script>
+<div id="nav-container"></div>
+<div class="main" style="padding:10px 14px;">
+<div class="page-shell">
+
+  <div class="page-hdr">
+    <div class="page-hdr-brand"><div>
+      <div class="page-hdr-title">SIGNALS</div>
+      <div class="page-hdr-sub">Contrarian · RLM · Steam · Sharp $ · Heavy Public · Drift</div>
+    </div></div>
+    <div class="page-hdr-actions">
+      <span id="run-ts" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;"></span>
+      <select class="t-select" id="sport-select" style="font-size:10px;" onchange="loadSignals()">
+        <option value="nba">NBA</option><option value="nfl">NFL</option>
+        <option value="mlb">MLB</option><option value="nhl">NHL</option>
+        <option value="ncaab">NCAAB</option><option value="ncaaf">NCAAF</option>
+      </select>
+      <button class="t-btn-ghost" onclick="loadSignals()">REFRESH</button>
+      <button class="t-btn" onclick="runSignalsV2()">⚡ SCAN</button>
+    </div>
+  </div>
+
+  <div class="page-kpi">
+    <div class="t-kpi-cell"><div class="tkv" id="k-total">0</div><div class="tkl">SIGNALS</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-contrarian" style="color:#cc3333;">0</div><div class="tkl">CONTRARIAN</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-rlm" style="color:#00ff41;">0</div><div class="tkl">RLM</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-steam" style="color:#aa9900;">0</div><div class="tkl">STEAM</div></div>
+    <div class="t-kpi-cell"><div class="tkv" id="k-sharp" style="color:#00ccff;">0</div><div class="tkl">SHARP $</div></div>
+  </div>
+
+  <div class="page-main">
+    <div class="page-tabs">
+      <button class="page-tab active" onclick="switchTab('live',this)">LIVE SIGNALS</button>
+      <button class="page-tab" onclick="switchTab('history',this);loadHistory()">HISTORY</button>
+      <button class="page-tab" onclick="switchTab('performance',this);loadPerformance()">PERFORMANCE</button>
+      <button class="page-tab" onclick="switchTab('backtest',this)">BACKTEST</button>
+    </div>
+    <div class="page-body">
+
+      <!-- LIVE SIGNALS -->
+      <div class="page-panel active" id="panel-live">
+        <div id="live-feed"><div class="tl"><span class="td">VIC&gt;</span><span class="ta">click SCAN to detect signals</span></div></div>
+      </div>
+
+      <!-- HISTORY -->
+      <div class="page-panel" id="panel-history">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <select class="t-select" id="h-type" style="font-size:10px;" onchange="loadHistory()">
+            <option value="">ALL TYPES</option>
+            <option value="contrarian">Contrarian</option>
+            <option value="rlm">RLM</option>
+            <option value="steam">Steam</option>
+            <option value="sharp_money">Sharp $</option>
+            <option value="heavy_public">Heavy Public</option>
+          </select>
+          <select class="t-select" id="h-outcome" style="font-size:10px;" onchange="loadHistory()">
+            <option value="">ALL OUTCOMES</option>
+            <option value="pending">Pending</option>
+            <option value="win">Win</option>
+            <option value="loss">Loss</option>
+            <option value="push">Push</option>
+          </select>
+          <select class="t-select" id="h-days" style="font-size:10px;" onchange="loadHistory()">
+            <option value="7">7 DAYS</option>
+            <option value="30" selected>30 DAYS</option>
+            <option value="90">90 DAYS</option>
+          </select>
+        </div>
+        <div id="history-feed"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">select filters to load history</span></div></div>
+      </div>
+
+      <!-- PERFORMANCE -->
+      <div class="page-panel" id="panel-performance">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <select class="t-select" id="perf-days" style="font-size:10px;" onchange="loadPerformance()">
+            <option value="7">7 DAYS</option>
+            <option value="30" selected>30 DAYS</option>
+            <option value="90">90 DAYS</option>
+          </select>
+        </div>
+        <div id="perf-feed"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">select period to view performance</span></div></div>
+      </div>
+
+      <!-- BACKTEST -->
+      <div class="page-panel" id="panel-backtest">
+        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+          <input type="date" class="t-input" id="bt-date" style="font-size:10px;width:140px;">
+          <button class="t-btn" onclick="runBacktest()">RUN BACKTEST</button>
+        </div>
+        <div id="bt-feed"><div class="tl"><span class="td">SYS&gt;</span><span class="ta">pick a date and click RUN</span></div></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="page-sidebar">
+    <div class="psb-sec">STATUS</div>
+    <div class="psb-row"><span class="psb-label">PROXY</span><span id="sb-proxy" class="psb-val">—</span></div>
+    <div class="psb-row"><span class="psb-label">ODDS API</span><span id="sb-odds" class="psb-val">—</span></div>
+    <div class="psb-sec" style="margin-top:10px;">SIGNAL GUIDE</div>
+    <div class="psb-row"><span class="psb-label" style="color:#cc3333;">CONTRARIAN</span><span style="color:#2a4a2a;font-size:10px;">heavy public + line against</span></div>
+    <div class="psb-row"><span class="psb-label" style="color:#00ff41;">RLM</span><span style="color:#2a4a2a;font-size:10px;">line vs public</span></div>
+    <div class="psb-row"><span class="psb-label" style="color:#aa9900;">STEAM</span><span style="color:#2a4a2a;font-size:10px;">sharp with public</span></div>
+    <div class="psb-row"><span class="psb-label" style="color:#00ccff;">SHARP $</span><span style="color:#2a4a2a;font-size:10px;">money divergence</span></div>
+    <div class="psb-sec" style="margin-top:10px;">QUICK NAV</div>
+    <a class="psb-quicklink" href="public.html">PUBLIC %</a>
+    <a class="psb-quicklink active-page" href="signals.html">SIGNALS</a>
+    <a class="psb-quicklink" href="alerts.html">ALERTS</a>
+    <div class="psb-sec" style="margin-top:10px;">LOG</div>
+    <div id="sb-log" style="font-size:9px;"></div>
+  </div>
+
+</div>
+</div>
+
+<script>
+document.getElementById('nav-container').innerHTML = navHTML('signals');
+checkServerStatus();
+
+function switchTab(name, el) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name)?.classList.add('active');
+}
+
+let currentSignals = [];
+
+async function runSignalsV2() {
+  const sport = document.getElementById('sport-select').value;
+  const feed = document.getElementById('live-feed');
+  feed.innerHTML = `<div class="tl"><span class="td">SYS&gt;</span><span class="ta">scanning ${sport.toUpperCase()} with enhanced engine...</span></div>`;
+  document.getElementById('k-total').textContent = '...';
+  try {
+    const r = await fetch(`${API}/api/signals/v2/${sport}`);
+    const d = await r.json();
+    currentSignals = d.signals || [];
+    document.getElementById('run-ts').textContent = new Date().toLocaleTimeString();
+
+    // KPIs
+    document.getElementById('k-total').textContent = d.count || 0;
+    document.getElementById('k-contrarian').textContent = d.summary?.contrarian || 0;
+    document.getElementById('k-rlm').textContent = d.summary?.rlm || 0;
+    document.getElementById('k-steam').textContent = d.summary?.steam || 0;
+    document.getElementById('k-sharp').textContent = d.summary?.sharp_money || 0;
+
+    document.getElementById('sb-odds').className = d.sources?.oddsAPI === 'OddsAPI' ? 'psb-ok' : 'psb-err';
+    document.getElementById('sb-odds').textContent = d.sources?.oddsAPI === 'OddsAPI' ? 'OK' : 'OFF';
+
+    if (!currentSignals.length) {
+      feed.innerHTML = '<div class="tl"><span class="tm">no signals detected for this sport</span></div>';
+      return;
+    }
+
+    feed.innerHTML = currentSignals.map((s, i) => {
+      const tagClass = `tag-${s.type === 'heavy_public' ? 'heavy' : s.type === 'sharp_money' ? 'sharp' : s.type}`;
+      const tagLabel = s.type === 'sharp_money' ? 'SHARP $' : s.type === 'heavy_public' ? 'HEAVY PUB' : s.type.toUpperCase();
+      const confColor = s.confidence === 'high' ? '#00ff41' : s.confidence === 'medium' ? '#aacc00' : '#2a6a2a';
+      return `<div class="sig-card ${s.type}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="sig-tag ${tagClass}">${tagLabel}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;font-weight:700;">${s.game}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${confColor};text-transform:uppercase;">${s.confidence}</span>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="grade-btn" onclick="gradeSignal(${i},'win')">WIN</button>
+            <button class="grade-btn" onclick="gradeSignal(${i},'loss')">LOSS</button>
+            <button class="grade-btn" onclick="gradeSignal(${i},'push')">PUSH</button>
+          </div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;line-height:1.6;">
+          ${s.reason}
+          ${s.pinSpread !== undefined ? `<br><span style="color:#00ccff;">Pin: ${s.pinSpread > 0 ? '+' : ''}${s.pinSpread}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:12px;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">
+          <span>Pub: ${s.publicAway}% / ${s.publicHome}%</span>
+          ${s.moneyAway ? `<span>Money: ${s.moneyAway}% / ${s.moneyHome}%</span>` : ''}
+          ${s.lineChange ? `<span>Move: ${s.lineChange > 0 ? '+' : ''}${s.lineChange}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    sbLog(`${d.count} signals | logged:${d.loggedToHistory} alerts:${d.autoAlerts}`, 'ok');
+  } catch(e) {
+    feed.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+    sbLog(e.message, 'err');
+  }
+}
+
+async function loadSignals() {
+  const sport = document.getElementById('sport-select').value;
+  const feed = document.getElementById('live-feed');
+  feed.innerHTML = `<div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading ${sport.toUpperCase()} signals...</span></div>`;
+  try {
+    const r = await fetch(`${API}/api/signals/${sport}`);
+    const d = await r.json();
+    currentSignals = d.signals || [];
+
+    document.getElementById('k-total').textContent = d.count || 0;
+    document.getElementById('k-contrarian').textContent = d.summary?.contrarian || 0;
+    document.getElementById('k-rlm').textContent = d.summary?.rlm || 0;
+    document.getElementById('k-steam').textContent = d.summary?.steam || 0;
+    document.getElementById('k-sharp').textContent = d.summary?.sharp_money || 0;
+
+    if (!currentSignals.length) {
+      feed.innerHTML = '<div class="tl"><span class="tm">no signals detected</span></div>';
+      return;
+    }
+
+    feed.innerHTML = currentSignals.map((s, i) => {
+      const tagClass = `tag-${s.type === 'heavy_public' ? 'heavy' : s.type === 'sharp_money' ? 'sharp' : s.type}`;
+      const tagLabel = s.type === 'sharp_money' ? 'SHARP $' : s.type === 'heavy_public' ? 'HEAVY PUB' : s.type.toUpperCase();
+      const confColor = s.confidence === 'high' ? '#00ff41' : s.confidence === 'medium' ? '#aacc00' : '#2a6a2a';
+      return `<div class="sig-card ${s.type}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="sig-tag ${tagClass}">${tagLabel}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;font-weight:700;">${s.game}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${confColor};text-transform:uppercase;">${s.confidence}</span>
+          </div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;line-height:1.6;">${s.reason}</div>
+        <div style="display:flex;gap:12px;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">
+          <span>Pub: ${s.publicAway}% / ${s.publicHome}%</span>
+          ${s.moneyAway ? `<span>Money: ${s.moneyAway}% / ${s.moneyHome}%</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    sbLog(`${d.count} signals loaded`, 'ok');
+  } catch(e) {
+    feed.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+  }
+}
+
+async function gradeSignal(idx, outcome) {
+  const s = currentSignals[idx];
+  if (!s) return;
+  try {
+    // Find in history by game + type + today's date
+    const today = new Date().toISOString().split('T')[0];
+    const hr = await fetch(`${API}/api/signals/history?days=1`);
+    const hd = await hr.json();
+    const match = hd.signals.find(h => h.game === s.game && h.type === s.type && h.date === today);
+    if (match) {
+      await fetch(`${API}/api/signals/history/${match.id}/grade`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome })
+      });
+      sbLog(`${s.game} graded ${outcome.toUpperCase()}`, 'ok');
+    }
+  } catch(e) { sbLog('Grade failed: ' + e.message, 'err'); }
+}
+
+async function loadHistory() {
+  const type = document.getElementById('h-type').value;
+  const outcome = document.getElementById('h-outcome').value;
+  const days = document.getElementById('h-days').value;
+  const feed = document.getElementById('history-feed');
+  feed.innerHTML = '<div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading history...</span></div>';
+  try {
+    let url = `${API}/api/signals/history?days=${days}`;
+    if (type) url += `&type=${type}`;
+    if (outcome) url += `&outcome=${outcome}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.signals?.length) {
+      feed.innerHTML = '<div class="tl"><span class="tm">no signals in history for filters</span></div>';
+      return;
+    }
+    feed.innerHTML = d.signals.map(s => {
+      const ocColor = s.outcome === 'win' ? '#00ff41' : s.outcome === 'loss' ? '#cc3333' : s.outcome === 'push' ? '#aacc00' : '#2a6a2a';
+      const tagClass = `tag-${s.type === 'heavy_public' ? 'heavy' : s.type === 'sharp_money' ? 'sharp' : s.type}`;
+      const tagLabel = s.type === 'sharp_money' ? 'SHARP $' : s.type === 'heavy_public' ? 'HEAVY PUB' : s.type.toUpperCase();
+      return `<div class="sig-card ${s.type}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="sig-tag ${tagClass}">${tagLabel}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;font-weight:700;">${s.game}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${ocColor};text-transform:uppercase;">${s.outcome}</span>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="grade-btn win" onclick="gradeHistory(${s.id},'win')">W</button>
+            <button class="grade-btn loss" onclick="gradeHistory(${s.id},'loss')">L</button>
+            <button class="grade-btn push" onclick="gradeHistory(${s.id},'push')">P</button>
+          </div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;line-height:1.6;">${s.reason}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;margin-top:4px;">${s.date} · ${s.confidence} confidence</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    feed.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+  }
+}
+
+async function gradeHistory(id, outcome) {
+  try {
+    await fetch(`${API}/api/signals/history/${id}/grade`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outcome })
+    });
+    loadHistory();
+    sbLog(`Signal graded ${outcome.toUpperCase()}`, 'ok');
+  } catch(e) { sbLog('Grade failed: ' + e.message, 'err'); }
+}
+
+async function loadPerformance() {
+  const days = document.getElementById('perf-days').value;
+  const feed = document.getElementById('perf-feed');
+  feed.innerHTML = '<div class="tl"><span class="td">SYS&gt;</span><span class="ta">computing performance...</span></div>';
+  try {
+    const r = await fetch(`${API}/api/signals/performance?days=${days}`);
+    const d = await r.json();
+
+    let html = '<div style="margin-bottom:16px;">';
+    html += '<div class="t-sec"><span>// OVERALL</span></div>';
+    const o = d.overall;
+    html += `<div class="perf-row"><span></span><span class="perf-hdr">W</span><span class="perf-hdr">L</span><span class="perf-hdr">P</span><span class="perf-hdr">WIN%</span><span class="perf-hdr">ROI</span><span class="perf-hdr">UNITS</span></div>`;
+    html += `<div class="perf-row"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;font-weight:700;">ALL SIGNALS</span>`;
+    html += `<span class="perf-val" style="color:#00ff41;">${o.wins}</span>`;
+    html += `<span class="perf-val" style="color:#cc3333;">${o.losses}</span>`;
+    html += `<span class="perf-val" style="color:#aacc00;">${o.pushes}</span>`;
+    html += `<span class="perf-val">${o.winRate}</span>`;
+    html += `<span class="perf-val" style="color:${o.roi.startsWith('-')?'#cc3333':'#00ff41'};">${o.roi}</span>`;
+    html += `<span class="perf-val" style="color:${o.units >= 0 ? '#00ff41' : '#cc3333'};">${o.units >= 0 ? '+' : ''}${o.units.toFixed(1)}</span>`;
+    html += `</div></div>`;
+
+    html += '<div class="t-sec"><span>// BY SIGNAL TYPE</span></div>';
+    html += `<div class="perf-row"><span></span><span class="perf-hdr">W</span><span class="perf-hdr">L</span><span class="perf-hdr">P</span><span class="perf-hdr">WIN%</span><span class="perf-hdr">ROI</span><span class="perf-hdr">UNITS</span></div>`;
+    for (const [type, data] of Object.entries(d.byType)) {
+      const typeColors = { contrarian:'#cc3333', rlm:'#00ff41', steam:'#aa9900', sharp_money:'#00ccff', heavy_public:'#ffaa00', drift:'#aacc00' };
+      html += `<div class="perf-row"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${typeColors[type]||'#00cc33'};font-weight:700;">${type.toUpperCase().replace('_',' ')}</span>`;
+      html += `<span class="perf-val" style="color:#00ff41;">${data.wins}</span>`;
+      html += `<span class="perf-val" style="color:#cc3333;">${data.losses}</span>`;
+      html += `<span class="perf-val" style="color:#aacc00;">${data.pushes}</span>`;
+      html += `<span class="perf-val">${data.winRate}</span>`;
+      html += `<span class="perf-val" style="color:${data.roi.startsWith('-')?'#cc3333':'#00ff41'};">${data.roi}</span>`;
+      html += `<span class="perf-val" style="color:${data.units >= 0 ? '#00ff41' : '#cc3333'};">${data.units >= 0 ? '+' : ''}${data.units.toFixed(1)}</span>`;
+      html += `</div>`;
+    }
+    feed.innerHTML = html;
+  } catch(e) {
+    feed.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+  }
+}
+
+async function runBacktest() {
+  const sport = document.getElementById('sport-select').value;
+  const date = document.getElementById('bt-date').value;
+  if (!date) { alert('Pick a date'); return; }
+  const feed = document.getElementById('bt-feed');
+  feed.innerHTML = '<div class="tl"><span class="td">SYS&gt;</span><span class="ta">loading backtest...</span></div>';
+  try {
+    const r = await fetch(`${API}/api/signals/backtest/${sport}?date=${date}`);
+    const d = await r.json();
+    if (!d.signals?.length) {
+      feed.innerHTML = `<div class="tl"><span class="tm">no signals on ${date}</span></div>`;
+      return;
+    }
+    let html = `<div class="t-sec"><span>// ${sport.toUpperCase()} · ${date} · ${d.totalSignals} SIGNALS</span></div>`;
+    for (const [type, sum] of Object.entries(d.summary)) {
+      const decided = sum.wins + sum.losses;
+      const wr = decided > 0 ? ((sum.wins / decided) * 100).toFixed(1) + '%' : 'N/A';
+      html += `<div class="tl" style="margin-bottom:4px;"><span class="td">${type.toUpperCase()}</span><span>${sum.count} signals | ${sum.wins}W ${sum.losses}L ${sum.pushes}P | WR ${wr}</span></div>`;
+    }
+    html += '<div style="margin-top:12px;">';
+    html += d.signals.map(s => {
+      const ocColor = s.outcome === 'win' ? '#00ff41' : s.outcome === 'loss' ? '#cc3333' : s.outcome === 'push' ? '#aacc00' : '#2a6a2a';
+      return `<div class="sig-card ${s.type}">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00cc33;font-weight:700;">${s.game}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${ocColor};text-transform:uppercase;">${s.outcome}</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;margin-top:4px;">${s.reason}</div>
+      </div>`;
+    }).join('');
+    html += '</div>';
+    feed.innerHTML = html;
+  } catch(e) {
+    feed.innerHTML = `<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+  }
+}
+
+function sbLog(msg, cls='') {
+  const el = document.getElementById('sb-log');
+  const d = document.createElement('div');
+  d.className = 'psb-log' + (cls ? ' psb-log-'+cls : '');
+  d.textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) + ' ' + msg;
+  el.prepend(d);
+  if (el.children.length > 10) el.lastChild.remove();
+}
+
+async function sbStatus() {
+  try {
+    const r = await fetch(`${API}/api/config`);
+    if (r.ok) {
+      document.getElementById('sb-proxy').className = 'psb-ok';
+      document.getElementById('sb-proxy').textContent = 'ONLINE';
+    }
+  } catch(e) {
+    document.getElementById('sb-proxy').className = 'psb-err';
+    document.getElementById('sb-proxy').textContent = 'OFFLINE';
+  }
+}
+sbStatus();
+loadSignals();
+</script>
+</body>
+</html>

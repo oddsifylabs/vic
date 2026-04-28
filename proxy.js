@@ -16,6 +16,7 @@ const LINE_SNAP_FILE = path.join(DATA_DIR, 'line_snapshots.json');
 const PARLAY_FILE = path.join(DATA_DIR, 'parlays.json');
 const SCRAPE_CACHE_FILE = path.join(DATA_DIR, 'scrape_cache.json');
 const CLV_SNAP_FILE    = path.join(DATA_DIR, 'clv_snapshots.json');
+const SIGNAL_HISTORY_FILE = path.join(DATA_DIR, 'signal_history.json');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -2742,6 +2743,312 @@ function computeSignal(game, move) {
   if (type === 'none') return null;
   return { type, side, reason, confidence };
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIGNAL HISTORY & PERFORMANCE TRACKING
+// Every signal gets logged with timestamp for backtesting & ROI analysis
+// ═══════════════════════════════════════════════════════════════════════════
+
+function loadSignalHistory() {
+  try { return JSON.parse(fs.readFileSync(SIGNAL_HISTORY_FILE, 'utf8')); } catch { return []; }
+}
+function saveSignalHistory(h) { fs.writeFileSync(SIGNAL_HISTORY_FILE, JSON.stringify(h, null, 2)); }
+
+// Log a signal to history (called by /api/signals when new signals are found)
+function logSignalsToHistory(sport, signals) {
+  const history = loadSignalHistory();
+  const today = new Date().toISOString().split('T')[0];
+  let added = 0;
+  for (const sig of signals) {
+    // Deduplicate: same game + same type + same day
+    const dup = history.find(h =>
+      h.game === sig.game && h.type === sig.type && h.date === today
+    );
+    if (dup) continue;
+    history.unshift({
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      date: today,
+      sport,
+      game: sig.game,
+      type: sig.type,
+      side: sig.side,
+      confidence: sig.confidence,
+      market: sig.market,
+      openLine: sig.openLine,
+      currentLine: sig.currentLine,
+      lineChange: sig.lineChange,
+      publicAway: sig.publicAway,
+      publicHome: sig.publicHome,
+      moneyAway: sig.moneyAway,
+      moneyHome: sig.moneyHome,
+      reason: sig.reason,
+      outcome: 'pending', // pending → win | loss | push
+      outcomeOdds: null,
+      outcomeNotes: '',
+      detectedAt: sig.detectedAt,
+      gradedAt: null
+    });
+    added++;
+  }
+  // Keep last 5000 signals
+  if (history.length > 5000) history.splice(5000);
+  saveSignalHistory(history);
+  return added;
+}
+
+// GET /api/signals/history — full signal history with filters
+app.get('/api/signals/history', (req, res) => {
+  let h = loadSignalHistory();
+  const sport = req.query.sport;
+  const type = req.query.type;
+  const outcome = req.query.outcome;
+  const days = parseInt(req.query.days) || 30;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  h = h.filter(s => new Date(s.detectedAt).getTime() > cutoff);
+  if (sport) h = h.filter(s => s.sport === sport);
+  if (type) h = h.filter(s => s.type === type);
+  if (outcome) h = h.filter(s => s.outcome === outcome);
+  res.json({ count: h.length, days, signals: h });
+});
+
+// PUT /api/signals/history/:id/grade — grade a signal outcome
+app.put('/api/signals/history/:id/grade', (req, res) => {
+  const history = loadSignalHistory();
+  const idx = history.findIndex(s => s.id == req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Signal not found' });
+  history[idx].outcome = req.body.outcome || 'pending';
+  history[idx].outcomeOdds = req.body.outcomeOdds || null;
+  history[idx].outcomeNotes = req.body.outcomeNotes || '';
+  history[idx].gradedAt = new Date().toISOString();
+  saveSignalHistory(history);
+  res.json({ ok: true, signal: history[idx] });
+});
+
+// GET /api/signals/performance — ROI & win rate by signal type
+app.get('/api/signals/performance', (req, res) => {
+  const h = loadSignalHistory().filter(s => s.outcome !== 'pending');
+  const days = parseInt(req.query.days) || 30;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const recent = h.filter(s => new Date(s.detectedAt).getTime() > cutoff);
+
+  const byType = {};
+  const all = { wins:0, losses:0, pushes:0, total:0 };
+
+  for (const s of recent) {
+    const t = s.type;
+    if (!byType[t]) byType[t] = { wins:0, losses:0, pushes:0, total:0 };
+    byType[t].total++;
+    all.total++;
+    if (s.outcome === 'win') { byType[t].wins++; all.wins++; }
+    else if (s.outcome === 'loss') { byType[t].losses++; all.losses++; }
+    else if (s.outcome === 'push') { byType[t].pushes++; all.pushes++; }
+  }
+
+  const calc = (obj) => {
+    const decided = obj.wins + obj.losses;
+    return {
+      ...obj,
+      winRate: decided > 0 ? ((obj.wins / decided) * 100).toFixed(1) + '%' : 'N/A',
+      roi: decided > 0 ? (((obj.wins - obj.losses) / decided) * 100).toFixed(1) + '%' : 'N/A',
+      units: obj.wins - (obj.losses * 1.1) // approximate at -110 juice
+    };
+  };
+
+  const result = { days, overall: calc(all), byType: {} };
+  for (const t of Object.keys(byType)) result.byType[t] = calc(byType[t]);
+  res.json(result);
+});
+
+// GET /api/signals/backtest/:sport — replay signals for a specific date
+app.get('/api/signals/backtest/:sport', async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  const date = req.query.date; // YYYY-MM-DD
+  if (!date) return res.status(400).json({ error: 'date query param required (YYYY-MM-DD)' });
+
+  const history = loadSignalHistory().filter(s =>
+    s.sport === sport && s.date === date
+  );
+
+  const byType = {};
+  for (const s of history) {
+    const t = s.type;
+    if (!byType[t]) byType[t] = { count:0, wins:0, losses:0, pushes:0 };
+    byType[t].count++;
+    if (s.outcome === 'win') byType[t].wins++;
+    else if (s.outcome === 'loss') byType[t].losses++;
+    else if (s.outcome === 'push') byType[t].pushes++;
+  }
+
+  res.json({
+    sport, date,
+    totalSignals: history.length,
+    signals: history,
+    summary: byType
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENHANCED SIGNALS ENGINE — Odds API line movement (more reliable than SAO)
+// GET /api/signals/v2/:sport
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function fetchOddsAPILineMovement(sport, cfg) {
+  if (!cfg.oddsKey) return [];
+  const SPORT_KEYS = {
+    nba:'basketball_nba', nfl:'americanfootball_nfl', mlb:'baseball_mlb',
+    nhl:'icehockey_nhl', ncaab:'basketball_ncaab', ncaaf:'americanfootball_ncaaf'
+  };
+  const sportKey = SPORT_KEYS[sport];
+  if (!sportKey) return [];
+
+  try {
+    const url = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${cfg.oddsKey}&regions=us,us2&markets=spreads&oddsFormat=american&bookmakers=pinnacle,fanduel,draftkings`;
+    const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) return [];
+    const games = await r.json();
+    if (!Array.isArray(games)) return [];
+
+    return games.map(g => {
+      const pin = g.bookmakers?.find(b => b.key === 'pinnacle');
+      const fd = g.bookmakers?.find(b => b.key === 'fanduel');
+      const dk = g.bookmakers?.find(b => b.key === 'draftkings');
+      const spread = pin?.markets?.find(m => m.key === 'spreads');
+      const awayOut = spread?.outcomes?.find(o => o.name === g.away_team);
+      const homeOut = spread?.outcomes?.find(o => o.name === g.home_team);
+      return {
+        away: g.away_team, home: g.home_team,
+        awaySpread: awayOut?.point, homeSpread: homeOut?.point,
+        awayOdds: awayOut?.price, homeOdds: homeOut?.price,
+        pinSpread: awayOut?.point, pinOdds: awayOut?.price,
+        source: 'OddsAPI',
+        commenceTime: g.commence_time
+      };
+    });
+  } catch(e) {
+    addLog('warn', 'SignalsV2', `Odds API line fetch failed for ${sport}`, e.message);
+    return [];
+  }
+}
+
+// GET /api/signals/v2/:sport — enhanced with Odds API + auto-log history
+app.get('/api/signals/v2/:sport', async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  const cfg = loadConfig();
+
+  try {
+    // Fetch all data in parallel: consensus + SAO line movement + Odds API
+    const [consensusRes, saoMovesRes, oddsLinesRes] = await Promise.allSettled([
+      fetch(`http://localhost:${PORT}/api/sao/consensus/${sport}`),
+      fetch(`http://localhost:${PORT}/api/sao/line-movement/${sport}`),
+      fetchOddsAPILineMovement(sport, cfg)
+    ]);
+
+    const consensus = consensusRes.status === 'fulfilled' ? await consensusRes.value.json() : { games: [] };
+    const saoMoves = saoMovesRes.status === 'fulfilled' ? await saoMovesRes.value.json() : { moves: [] };
+    const oddsLines = oddsLinesRes.status === 'fulfilled' ? oddsLinesRes.value : [];
+
+    const signals = [];
+    const counts = { heavy_public:0, steam:0, rlm:0, contrarian:0, sharp_money:0, drift:0 };
+
+    for (const game of (consensus.games || [])) {
+      // Try SAO move first, then Odds API line
+      let move = (saoMoves.moves || []).find(m =>
+        fuzzyTeamMatch(m.away, game.away) && fuzzyTeamMatch(m.home, game.home)
+      );
+      // Fallback to Odds API line data for Pinnacle reference
+      const oddsLine = oddsLines.find(l =>
+        fuzzyTeamMatch(l.away, game.away) && fuzzyTeamMatch(l.home, game.home)
+      );
+
+      const sig = computeSignal(game, move);
+      if (!sig) continue;
+
+      // Enhance with Odds API data if available
+      if (oddsLine) {
+        sig.pinSpread = oddsLine.pinSpread;
+        sig.pinOdds = oddsLine.pinOdds;
+      }
+
+      counts[sig.type] = (counts[sig.type] || 0) + 1;
+      signals.push({
+        game: `${game.away} @ ${game.home}`,
+        type: sig.type,
+        side: sig.side,
+        market: move ? 'spread' : 'n/a',
+        publicAway: game.awayBetPct,
+        publicHome: game.homeBetPct,
+        moneyAway: game.awayMoneyPct,
+        moneyHome: game.homeMoneyPct,
+        openLine: move?.openLine,
+        currentLine: move?.currentLine,
+        lineChange: move?.change,
+        pinSpread: oddsLine?.pinSpread,
+        pinOdds: oddsLine?.pinOdds,
+        reason: sig.reason,
+        confidence: sig.confidence,
+        sport,
+        detectedAt: new Date().toISOString()
+      });
+    }
+
+    // Sort: contrarian → high confidence
+    const confOrder = { high:0, medium:1, low:2 };
+    const typeOrder = { contrarian:0, rlm:1, steam:2, sharp_money:3, heavy_public:4, drift:5 };
+    signals.sort((a, b) => {
+      const td = typeOrder[a.type] - typeOrder[b.type];
+      if (td !== 0) return td;
+      return confOrder[a.confidence] - confOrder[b.confidence];
+    });
+
+    // Auto-log to history
+    const logged = logSignalsToHistory(sport, signals);
+
+    // Auto-alert on contrarian + high confidence
+    const contrarianSignals = signals.filter(s => s.type === 'contrarian' && s.confidence === 'high');
+    if (contrarianSignals.length > 0) {
+      const alerts = loadAlerts();
+      for (const cs of contrarianSignals) {
+        const dup = alerts.find(a =>
+          a.game === cs.game && a.type === 'rlm' && a.active !== false
+        );
+        if (dup) continue;
+        alerts.push({
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          game: cs.game,
+          sport: sport.toUpperCase(),
+          type: 'rlm',
+          condition: 'any_move',
+          threshold: '',
+          priority: 'high',
+          notes: `AUTO: ${cs.reason}`,
+          active: true, triggered: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+      if (contrarianSignals.length > 0) saveAlerts(alerts);
+    }
+
+    const result = {
+      sport, count: signals.length, signals, summary: counts,
+      sources: {
+        consensus: consensus.source || 'none',
+        lineMovement: saoMoves.count > 0 ? 'SAO' : 'none',
+        oddsAPI: oddsLines.length > 0 ? 'OddsAPI' : 'none'
+      },
+      loggedToHistory: logged,
+      autoAlerts: contrarianSignals.length,
+      scrapedAt: new Date().toISOString()
+    };
+
+    addLog('info', 'SignalsV2', `${sport.toUpperCase()}`,
+      `${signals.length} signals | C:${counts.contrarian} R:${counts.rlm} S:${counts.steam} | logged:${logged} alerts:${contrarianSignals.length}`);
+    res.json(result);
+  } catch(e) {
+    addLog('error', 'SignalsV2', `${sport.toUpperCase()}`, e.message);
+    res.json({ sport, count:0, signals:[], summary:{}, error:e.message, scrapedAt:new Date().toISOString() });
+  }
+});
 
 // GET /api/signals/:sport
 app.get('/api/signals/:sport', async (req, res) => {
