@@ -31,12 +31,31 @@ VIC is a sharp betting intelligence engine that scrapes public betting percentag
 
 ## 🚀 Deploy on Railway
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/vic)
+VIC is Railway-ready. You can deploy manually or publish it as a reusable template.
 
-1. Click the button above
-2. Add your environment variables (see below)
-3. (Optional) Add a **Volume** to persist data between deploys
-4. Done — your instance is live!
+### Option A — One-Click Template (for users)
+
+Once the template is published, anyone can deploy their own VIC instance in seconds.
+
+> **To publish the template:**
+> 1. Push this repo to GitHub (`oddsifylabs/vic`)
+> 2. Go to [Railway Dashboard](https://railway.app/dashboard) → **New Project** → **Deploy from GitHub repo**
+> 3. Select the `vic` repo → Railway will auto-detect `railway.json` and `Procfile`
+> 4. After the first deploy succeeds, open the project → **Create Template**
+> 5. Copy the template URL (e.g. `https://railway.app/template/XXXXXX`)
+> 6. Paste that URL into the README button below and commit
+
+```markdown
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/YOUR_TEMPLATE_ID)
+```
+
+### Option B — Manual Deploy (for you, right now)
+
+1. [Railway Dashboard](https://railway.app/dashboard) → **New** → **GitHub Repo**
+2. Select `oddsifylabs/vic`
+3. Add the environment variables below
+4. (Optional) Add a **Volume** mounted at `/data` and set `DATA_DIR=/data`
+5. Deploy — done!
 
 ### Environment Variables
 

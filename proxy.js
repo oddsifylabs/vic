@@ -27,6 +27,9 @@ app.use(express.static(__dirname));
 // Root redirects to lock screen
 app.get('/', (req, res) => res.redirect('/lock.html'));
 
+// Railway + container healthcheck
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'vic', version: '3.0.0' }));
+
 function loadConfig() {
   let cfg = {};
   try { cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { cfg = {}; }
