@@ -79,6 +79,7 @@ body {
   background: var(--bg-base);
   color: var(--tx-1);
   min-height: 100vh;
+  padding-bottom: 76px; /* clear footer bar (~24px @ bottom:48px) + nav (48px) */
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -989,8 +990,8 @@ body::before {
 .main {
   margin-left: 0;
   margin-top: 48px;    /* top header height */
-  margin-bottom: 48px; /* terminal footer nav */
-  min-height: calc(100vh - 108px);
+  margin-bottom: 76px; /* terminal footer nav (48px) + footer bar (~24px) + pad */
+  min-height: calc(100vh - 132px);
   position: relative;
   z-index: 1;
   display: flex;

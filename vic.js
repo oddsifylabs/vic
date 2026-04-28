@@ -393,14 +393,6 @@ function navHTML(activePage) {
     ${quickLinks || '<span class="tnav-sep" style="color:#1e4a1e;">SELECT A SECTION</span>'}
   </div>
 
-  <!-- Divider -->
-  <div class="tnav-divider"></div>
-
-  <!-- SETTINGS — always pinned right -->
-  <a class="tnav-pinned${activePage === 'config' ? ' active' : ''}" href="config.html" title="Settings">
-    <span class="tnav-pin-icon">⚙</span>
-    <span class="tnav-pin-label">SETTINGS</span>
-  </a>
 </nav>
 `;
 }
