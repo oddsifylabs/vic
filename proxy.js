@@ -2534,8 +2534,8 @@ app.get('/api/sao/consensus/:sport', async (req, res) => {
               awayBetPct: parseInt(pct0[1]),
               homeBetPct: parseInt(pct2[1]),
               awayMoneyPct: null, homeMoneyPct: null,
-              signal: parseInt(pct0[1]) >= 75 || parseInt(pct2[1]) >= 75 ? 'steam' : 'none',
-              hasRLM: false, sport, source: 'covers'
+              signal: parseInt(pct0[1]) >= 75 || parseInt(pct2[1]) >= 75 ? 'heavy_public' : 'none',
+              sport, source: 'covers'
             });
           }
         });
@@ -2552,8 +2552,8 @@ app.get('/api/sao/consensus/:sport', async (req, res) => {
               games.push({
                 away, home, awayBetPct: awayPct, homeBetPct: homePct,
                 awayMoneyPct: null, homeMoneyPct: null,
-                signal: Math.max(awayPct, homePct) >= 75 ? 'steam' : 'none',
-                hasRLM: false, sport, source: 'covers'
+                signal: Math.max(awayPct, homePct) >= 75 ? 'heavy_public' : 'none',
+                sport, source: 'covers'
               });
             }
           }
@@ -2598,6 +2598,7 @@ app.get('/api/sao/consensus/:sport', async (req, res) => {
           away:betMatch[1], home:betMatch[2],
           awayBetPct:parseInt(betMatch[3]), homeBetPct:parseInt(betMatch[4]),
           awayMoneyPct:parseInt(betMatch[5]), homeMoneyPct:parseInt(betMatch[6]),
+          signal: Math.max(parseInt(betMatch[3]), parseInt(betMatch[4])) >= 75 ? 'heavy_public' : 'none',
           sport, source:'sao'
         });
       }
@@ -2633,4 +2634,193 @@ app.get('/api/sao/line-movement/:sport', async (req, res) => {
     });
     res.json({ sport, count:moves.length, moves, scrapedAt:new Date().toISOString() });
   } catch(e) { res.json({ sport, count:0, moves:[], error:e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNIFIED SIGNALS ENGINE — cross-references consensus + line movement
+// Returns: heavy_public, steam, rlm, contrarian, sharp_money, drift
+// ═══════════════════════════════════════════════════════════════════════════
+
+function normalizeTeamName(name) {
+  if (!name) return '';
+  return name.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function fuzzyTeamMatch(a, b) {
+  const na = normalizeTeamName(a);
+  const nb = normalizeTeamName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const wa = na.split(' ').filter(w => w.length > 2);
+  const wb = nb.split(' ').filter(w => w.length > 2);
+  const common = wa.filter(w => wb.includes(w));
+  return common.length >= Math.min(wa.length, wb.length) * 0.5;
+}
+
+function computeSignal(game, move) {
+  const awayPub = game.awayBetPct || 0;
+  const homePub = game.homeBetPct || 0;
+  const awayMoney = game.awayMoneyPct || 0;
+  const homeMoney = game.homeMoneyPct || 0;
+
+  const publicSide = awayPub > 60 ? 'away' : homePub > 60 ? 'home' : 'even';
+  const heavyPublic = Math.max(awayPub, homePub) >= 70;
+  const publicFav = awayPub > homePub ? 'away' : 'home';
+
+  // No line movement data — check sharp money + heavy public only
+  if (!move) {
+    if (awayMoney && homeMoney) {
+      const moneyFav = awayMoney > homeMoney ? 'away' : 'home';
+      const sharpDiff = Math.abs(awayMoney - awayPub);
+      if (sharpDiff >= 15 && moneyFav !== publicFav) {
+        return {
+          type: 'sharp_money', side: moneyFav,
+          reason: `${awayMoney}% money vs ${awayPub}% bets on ${game.away} — sharp divergence against public`,
+          confidence: sharpDiff >= 25 ? 'high' : 'medium'
+        };
+      }
+    }
+    if (heavyPublic) {
+      return {
+        type: 'heavy_public', side: publicFav === 'away' ? 'home' : 'away',
+        reason: `${Math.max(awayPub, homePub)}% public on ${publicFav === 'away' ? game.away : game.home} — lopsided action (no line data)`,
+        confidence: 'low'
+      };
+    }
+    return null;
+  }
+
+  const openLine = move.openLine;
+  const change = move.change;
+
+  // Determine line direction: change * openLine > 0 → toward away
+  const lineTowardAway = (change * openLine) > 0;
+  const lineTowardHome = !lineTowardAway;
+
+  let type = 'none', side = null, reason = '', confidence = 'low';
+
+  if (publicSide === 'away' && lineTowardAway) {
+    type = 'steam'; side = 'away';
+    reason = `${awayPub}% public on ${game.away}, line moved WITH them (${openLine}→${move.currentLine})`;
+    confidence = heavyPublic ? 'high' : 'medium';
+  } else if (publicSide === 'home' && lineTowardHome) {
+    type = 'steam'; side = 'home';
+    reason = `${homePub}% public on ${game.home}, line moved WITH them (${openLine}→${move.currentLine})`;
+    confidence = heavyPublic ? 'high' : 'medium';
+  } else if (publicSide === 'away' && lineTowardHome) {
+    type = 'rlm'; side = 'home';
+    reason = `${awayPub}% public on ${game.away}, but line moved AGAINST them (${openLine}→${move.currentLine})`;
+    confidence = heavyPublic ? 'high' : 'medium';
+  } else if (publicSide === 'home' && lineTowardAway) {
+    type = 'rlm'; side = 'away';
+    reason = `${homePub}% public on ${game.home}, but line moved AGAINST them (${openLine}→${move.currentLine})`;
+    confidence = heavyPublic ? 'high' : 'medium';
+  } else if (publicSide === 'even' && Math.abs(change) >= 0.5) {
+    type = 'drift'; side = lineTowardAway ? 'away' : 'home';
+    reason = `Line moved ${openLine}→${move.currentLine} without heavy public lean`;
+    confidence = 'low';
+  }
+
+  // Contrarian = heavy public + RLM (strongest fade)
+  if (heavyPublic && type === 'rlm') {
+    type = 'contrarian';
+    reason += ' | CONTRARIAN: Heavy public + line against = strongest fade';
+    confidence = 'high';
+  }
+
+  // Sharp money overlay
+  if (awayMoney && homeMoney && type !== 'contrarian') {
+    const moneyFav = awayMoney > homeMoney ? 'away' : 'home';
+    const sharpDiff = Math.abs(awayMoney - awayPub);
+    if (sharpDiff >= 15 && moneyFav !== publicFav) {
+      reason += ` | Sharp money divergence: ${awayMoney}% money vs ${awayPub}% bets`;
+      if (confidence !== 'high') confidence = 'medium';
+    }
+  }
+
+  if (type === 'none') return null;
+  return { type, side, reason, confidence };
+}
+
+// GET /api/signals/:sport
+app.get('/api/signals/:sport', async (req, res) => {
+  const sport = req.params.sport.toLowerCase();
+  const cacheKey = `signals_${sport}`;
+  const cached = getCached(cacheKey, 3 * 60 * 1000); // 3 min cache
+  if (cached) {
+    addLog('info', 'Signals', `${sport.toUpperCase()} (cache)`, `${cached.count} signals`);
+    return res.json(cached);
+  }
+
+  try {
+    // Fetch consensus + line movement in parallel
+    const [consensusRes, movesRes] = await Promise.allSettled([
+      fetch(`http://localhost:${PORT}/api/sao/consensus/${sport}`),
+      fetch(`http://localhost:${PORT}/api/sao/line-movement/${sport}`)
+    ]);
+
+    const consensus = consensusRes.status === 'fulfilled' ? await consensusRes.value.json() : { games: [] };
+    const moves = movesRes.status === 'fulfilled' ? await movesRes.value.json() : { moves: [] };
+
+    const signals = [];
+    const counts = { heavy_public:0, steam:0, rlm:0, contrarian:0, sharp_money:0, drift:0 };
+
+    for (const game of (consensus.games || [])) {
+      const move = (moves.moves || []).find(m =>
+        fuzzyTeamMatch(m.away, game.away) && fuzzyTeamMatch(m.home, game.home)
+      );
+
+      const sig = computeSignal(game, move);
+      if (!sig) continue;
+
+      counts[sig.type] = (counts[sig.type] || 0) + 1;
+
+      signals.push({
+        game: `${game.away} @ ${game.home}`,
+        type: sig.type,
+        side: sig.side,
+        market: move ? 'spread' : 'n/a',
+        publicAway: game.awayBetPct,
+        publicHome: game.homeBetPct,
+        moneyAway: game.awayMoneyPct,
+        moneyHome: game.homeMoneyPct,
+        openLine: move?.openLine,
+        currentLine: move?.currentLine,
+        lineChange: move?.change,
+        reason: sig.reason,
+        confidence: sig.confidence,
+        sport,
+        detectedAt: new Date().toISOString()
+      });
+    }
+
+    // Sort: contrarian → high confidence → medium → low
+    const confOrder = { high:0, medium:1, low:2 };
+    const typeOrder = { contrarian:0, rlm:1, steam:2, sharp_money:3, heavy_public:4, drift:5 };
+    signals.sort((a, b) => {
+      const td = typeOrder[a.type] - typeOrder[b.type];
+      if (td !== 0) return td;
+      return confOrder[a.confidence] - confOrder[b.confidence];
+    });
+
+    const result = {
+      sport,
+      count: signals.length,
+      signals,
+      summary: counts,
+      sources: {
+        consensus: consensus.source || 'none',
+        lineMovement: moves.count > 0 ? 'SAO' : 'none'
+      },
+      scrapedAt: new Date().toISOString()
+    };
+
+    setCache(cacheKey, result);
+    addLog('info', 'Signals', `${sport.toUpperCase()}`, `${signals.length} signals | C:${counts.contrarian} R:${counts.rlm} S:${counts.steam} H:${counts.heavy_public}`);
+    res.json(result);
+  } catch(e) {
+    addLog('error', 'Signals', `${sport.toUpperCase()}`, e.message);
+    res.json({ sport, count:0, signals:[], summary:{}, error:e.message, scrapedAt:new Date().toISOString() });
+  }
 });

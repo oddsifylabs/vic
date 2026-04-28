@@ -71,34 +71,90 @@
 <script>
 document.getElementById('nav-container').innerHTML = navHTML('public');
 checkServerStatus();
-let currentSport='nba',pubData=[],pubText='';
+let currentSport='nba',pubData=[],pubText='',sigData=[];
 loadPublic();
 function selectSport(sport,el){currentSport=sport;document.querySelectorAll('.page-tab').forEach(b=>b.classList.remove('active'));el.classList.add('active');loadPublic();}
 async function loadPublic(){
   const body=document.getElementById('pub-body');
-  body.innerHTML=`<div class="tl"><span class="td">SYS&gt;</span><span class="ta">scraping SAO consensus for ${currentSport.toUpperCase()}...</span></div>`;
+  body.innerHTML=`<div class="tl"><span class="td">SYS&gt;</span><span class="ta">scraping consensus + computing signals for ${currentSport.toUpperCase()}...</span></div>`;
   try{
-    const r=await fetch(`${API}/api/sao/consensus/${currentSport}`);
-    const d=await r.json();pubData=d.games||[];pubText=d.text||'';
+    // Fetch consensus + signals in parallel
+    const [consensusRes, signalsRes] = await Promise.allSettled([
+      fetch(`${API}/api/sao/consensus/${currentSport}`),
+      fetch(`${API}/api/signals/${currentSport}`)
+    ]);
+
+    const consensus = consensusRes.status === 'fulfilled' ? await consensusRes.value.json() : { games:[] };
+    const signals = signalsRes.status === 'fulfilled' ? await signalsRes.value.json() : { summary:{} };
+
+    pubData = consensus.games || [];
+    pubText = consensus.text || '';
+    sigData = signals.signals || [];
+
     document.getElementById('sb-sao').className='psb-ok';document.getElementById('sb-sao').textContent='OK';
-    const fade=pubData.filter(g=>parseFloat(g.betPct1)>70||parseFloat(g.betPct2)>70).length;
-    const steam=pubData.filter(g=>g.steam).length;
-    const rlm=pubData.filter(g=>g.rlm).length;
-    document.getElementById('k-games').textContent=pubData.length||'—';
-    document.getElementById('k-fade').textContent=fade||'—';
-    document.getElementById('k-steam').textContent=steam||'—';
-    document.getElementById('k-rlm').textContent=rlm||'—';
-    if(!pubData.length){body.innerHTML=pubText?`<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;line-height:1.9;white-space:pre-wrap;">${pubText}</div>`:'<div class="tl"><span class="tm">no data — off-season</span></div>';return;}
-    renderPublic();sbLog(`${pubData.length} games loaded`,'ok');
-  }catch(e){body.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;document.getElementById('sb-sao').className='psb-err';document.getElementById('sb-sao').textContent='ERROR';}
+
+    // KPIs
+    const fade = pubData.filter(g => (g.awayBetPct > 70 || g.homeBetPct > 70)).length;
+    const heavyPub = (signals.summary?.heavy_public || 0);
+    const rlm = (signals.summary?.rlm || 0) + (signals.summary?.contrarian || 0);
+    const steam = signals.summary?.steam || 0;
+
+    document.getElementById('k-games').textContent = pubData.length || '—';
+    document.getElementById('k-fade').textContent = fade || '—';
+    document.getElementById('k-steam').textContent = steam || '—';
+    document.getElementById('k-rlm').textContent = rlm || '—';
+
+    if(!pubData.length){
+      body.innerHTML = pubText
+        ? `<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2a8a2a;line-height:1.9;white-space:pre-wrap;">${pubText}</div>`
+        : '<div class="tl"><span class="tm">no data — off-season</span></div>';
+      return;
+    }
+
+    renderPublic(sigData);
+    sbLog(`${pubData.length} games | ${signals.count||0} signals`,'ok');
+  }catch(e){
+    body.innerHTML=`<div class="tl"><span class="tr">[ER]</span><span>${e.message}</span></div>`;
+    document.getElementById('sb-sao').className='psb-err';document.getElementById('sb-sao').textContent='ERROR';
+  }
 }
-function renderPublic(){
+function renderPublic(signals){
+  // Build a lookup: gameKey → signal for fast matching
+  const sigMap = {};
+  for (const s of signals) {
+    const key = normalizeTeamName(s.game.split('@')[0].trim()) + '_' + normalizeTeamName(s.game.split('@')[1].trim());
+    sigMap[key] = s;
+  }
+
   document.getElementById('pub-body').innerHTML=pubData.map(g=>{
-    const bp1=parseFloat(g.betPct1)||0,bp2=parseFloat(g.betPct2)||0;
-    const mp1=parseFloat(g.moneyPct1)||0,mp2=parseFloat(g.moneyPct2)||0;
-    const fade=bp1>70||bp2>70;const steam=g.steam||false;const rlm=g.rlm||false;
-    const cls=fade?'fade':steam?'steam':rlm?'sharp':'';
-    const sigTag=fade?`<span style="color:#cc3333;font-family:'JetBrains Mono',monospace;font-size:9px;">[FADE SPOT]</span>`:steam?`<span style="color:#aa9900;font-family:'JetBrains Mono',monospace;font-size:9px;">[STEAM]</span>`:rlm?`<span style="color:#00ff41;font-family:'JetBrains Mono',monospace;font-size:9px;">[RLM]</span>`:'';
+    const bp1 = g.awayBetPct || 0, bp2 = g.homeBetPct || 0;
+    const mp1 = g.awayMoneyPct || 0, mp2 = g.homeMoneyPct || 0;
+
+    // Find matching signal
+    const gKey = normalizeTeamName(g.away) + '_' + normalizeTeamName(g.home);
+    const sig = sigMap[gKey];
+
+    let cls = '', sigTag = '';
+    if (bp1 > 70 || bp2 > 70) {
+      cls = 'fade';
+      sigTag = `<span style="color:#cc3333;font-family:'JetBrains Mono',monospace;font-size:9px;">[FADE SPOT]</span>`;
+    }
+    if (sig) {
+      const typeColors = {
+        contrarian: '#cc3333', rlm: '#00ff41', steam: '#aa9900',
+        sharp_money: '#00ccff', heavy_public: '#ffaa00', drift: '#aacc00'
+      };
+      const typeLabels = {
+        contrarian: 'CONTRARIAN', rlm: 'RLM', steam: 'STEAM',
+        sharp_money: 'SHARP $', heavy_public: 'HEAVY PUB', drift: 'DRIFT'
+      };
+      const color = typeColors[sig.type] || '#00ff41';
+      const label = typeLabels[sig.type] || sig.type.toUpperCase();
+      sigTag = `<span style="color:${color};font-family:'JetBrains Mono',monospace;font-size:9px;">[${label}]</span>`;
+      if (sig.type === 'contrarian' || sig.type === 'rlm') cls = 'sharp';
+      else if (sig.type === 'steam') cls = 'steam';
+    }
+
     return `<div class="pub-card ${cls}">
       <div class="tl" style="border:none;padding:0;margin-bottom:8px;">
         <span class="tb">${g.away||'Away'} @ ${g.home||'Home'}</span>
@@ -109,25 +165,30 @@ function renderPublic(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
           <div class="pct-lbl">BETS %</div>
-          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.team1||g.away||'?'}</span><span class="pct-num" style="font-size:12px;">${bp1}%</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.away||'?'}</span><span class="pct-num" style="font-size:12px;">${bp1}%</span></div>
           <div class="bar-wrap"><div class="bar-fill" style="width:${bp1}%;background:${bp1>60?'#cc3333':'#2a8a2a'};"></div></div>
-          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.team2||g.home||'?'}</span><span class="pct-num" style="font-size:12px;">${bp2}%</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.home||'?'}</span><span class="pct-num" style="font-size:12px;">${bp2}%</span></div>
           <div class="bar-wrap"><div class="bar-fill" style="width:${bp2}%;background:${bp2>60?'#cc3333':'#2a8a2a'};"></div></div>
         </div>
         <div>
           <div class="pct-lbl">MONEY %</div>
-          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.team1||g.away||'?'}</span><span class="pct-num" style="font-size:12px;">${mp1}%</span></div>
-          <div class="bar-wrap"><div class="bar-fill" style="width:${mp1}%;background:${mp1>60?'#cc3333':'#00ff41'};"></div></div>
-          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.team2||g.home||'?'}</span><span class="pct-num" style="font-size:12px;">${mp2}%</span></div>
-          <div class="bar-wrap"><div class="bar-fill" style="width:${mp2}%;background:${mp2>60?'#cc3333':'#00ff41'};"></div></div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.away||'?'}</span><span class="pct-num" style="font-size:12px;">${mp1||'—'}%</span></div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${mp1||0}%;background:${mp1>60?'#cc3333':'#00ff41'};"></div></div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a6a2a;">${g.home||'?'}</span><span class="pct-num" style="font-size:12px;">${mp2||'—'}%</span></div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${mp2||0}%;background:${mp2>60?'#cc3333':'#00ff41'};"></div></div>
         </div>
       </div>
+      ${sig ? `<div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1e4a1e;">${sig.reason}</div>` : ''}
     </div>`;
   }).join('');
 }
+function normalizeTeamName(name) {
+  if (!name) return '';
+  return name.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
 async function aiSharpAnalysis(){
   const sidebar=document.getElementById('ai-sidebar');sidebar.textContent='analyzing...';
-  const ctx=pubText||pubData.map(g=>`${g.away||''}@${g.home||''}: Bets ${g.betPct1}/${g.betPct2}% Money ${g.moneyPct1}/${g.moneyPct2}%`).join('\n');
+  const ctx=pubText||pubData.map(g=>`${g.away||''}@${g.home||''}: Bets ${g.awayBetPct}/${g.homeBetPct}% Money ${g.awayMoneyPct}/${g.homeMoneyPct}%`).join('\n');
   try{
     const text=await proxyClaudeWithSearch(`Sharp ${currentSport.toUpperCase()} analyst. Top 3 edges from public data.\n${ctx}\n1 line each. Be specific.`,400);
     sidebar.innerHTML=text.split('\n').filter(l=>l.trim()).map(l=>`<div style="margin-bottom:4px;">${l}</div>`).join('');
