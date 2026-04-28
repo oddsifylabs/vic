@@ -1155,14 +1155,16 @@ app.get('/api/sao/test', async (req, res) => {
 });
 
 
-app.listen(PORT, () => {
+// Health check for Railway
+app.get('/health', (req, res) => res.json({ ok: true, version: '3.0.0', ts: new Date().toISOString() }));
+
+app.listen(PORT, '0.0.0.0', () => {
   // Write startup log so logs.json is created immediately
   addLog('info', 'System', `VIC server started on port ${PORT}`, `v3 ready`);
   console.log('\n==========================================');
   console.log('   VIC -- Vegas Intelligence Console     ');
-  console.log('   Running at http://localhost:' + PORT + '     ');
+  console.log('   Running at http://0.0.0.0:' + PORT + '     ');
   console.log('==========================================\n');
-  console.log('Open your browser to: http://localhost:' + PORT);
   console.log('Press Ctrl+C to stop.\n');
 });
 
