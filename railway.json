@@ -6,7 +6,41 @@
   "deploy": {
     "startCommand": "node proxy.js",
     "healthcheckPath": "/health",
-    "healthcheckTimeout": 30,
-    "restartPolicyType": "ON_FAILURE"
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  },
+  "variables": {
+    "ODDS_API_KEY": {
+      "description": "Your The Odds API key (get one free at https://the-odds-api.com)",
+      "required": true
+    },
+    "CLAUDE_API_KEY": {
+      "description": "Your Anthropic Claude API key (get one at https://console.anthropic.com)",
+      "required": true
+    },
+    "TELEGRAM_BOT_TOKEN": {
+      "description": "Telegram bot token for alerts (create one via @BotFather)",
+      "required": false
+    },
+    "TELEGRAM_CHAT_ID": {
+      "description": "Telegram chat/group ID for alerts",
+      "required": false
+    },
+    "DEFAULT_BOOK": {
+      "description": "Default sportsbook (hardrockbet, betmgm, caesars, etc.)",
+      "required": false
+    },
+    "ODDS_REGION": {
+      "description": "Region (us, us2, uk, au, eu)",
+      "required": false
+    },
+    "UNIT_SIZE": {
+      "description": "Default unit size (default: 100)",
+      "required": false
+    },
+    "DATA_DIR": {
+      "description": "Path to persistent data directory",
+      "required": false
+    }
   }
 }

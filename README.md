@@ -35,6 +35,10 @@ VIC is Railway-ready. You can deploy manually or publish it as a reusable templa
 
 ### Option A — One-Click Template (for users)
 
+**You must bring your own API keys.** VIC does not include any paid keys.
+- [The Odds API](https://the-odds-api.com) — free tier available
+- [Anthropic Claude](https://console.anthropic.com) — you supply your own key
+
 Once the template is published, anyone can deploy their own VIC instance in seconds.
 
 > **To publish the template:**
@@ -63,8 +67,8 @@ Set these in your Railway dashboard after deploying:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ODDS_API_KEY` | **Yes** | [The Odds API](https://the-odds-api.com) key |
-| `CLAUDE_API_KEY` | No | [Claude/Anthropic](https://console.anthropic.com) key for AI summaries |
+| `ODDS_API_KEY` | **Yes** | Your own [The Odds API](https://the-odds-api.com) key (free tier available) |
+| `CLAUDE_API_KEY` | **Yes** | Your own [Claude/Anthropic](https://console.anthropic.com) key |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot token for alerts |
 | `TELEGRAM_CHAT_ID` | No | Telegram chat/group ID for alerts |
 | `DEFAULT_BOOK` | No | Default sportsbook (`hardrockbet`, `betmgm`, `caesars`, etc.) |
@@ -95,10 +99,10 @@ node proxy.js
 # Open http://localhost:3747
 ```
 
-Copy the example config:
+Copy the example config and fill in your own API keys:
 ```bash
-cp config.example.json data/config.json
-# Edit data/config.json with your API keys
+cp .env.example .env
+# Edit .env with your ODDS_API_KEY and CLAUDE_API_KEY
 ```
 
 ---
